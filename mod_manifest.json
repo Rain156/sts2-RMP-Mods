@@ -1,0 +1,7 @@
+{
+  "pck_name": "RemoveMultiplayerPlayerLimit",
+  "name": "Remove Multiplayer Player Limit",
+  "author": "Rain_G",
+  "description": "Raise multiplayer player cap from 4 to 16.",
+  "version": "0.0.4"
+}
