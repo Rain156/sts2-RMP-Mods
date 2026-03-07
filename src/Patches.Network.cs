@@ -1,49 +1,41 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
-using System.Reflection.Emit;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
+using MegaCrit.Sts2.Core.Models.Events;
 using MegaCrit.Sts2.Core.Multiplayer;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
 using MegaCrit.Sts2.Core.Multiplayer.Messages.Lobby;
 using MegaCrit.Sts2.Core.Multiplayer.Serialization;
 using MegaCrit.Sts2.Core.Runs;
+using RemoveMultiplayerPlayetLimit.src.Extensions;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using System.Reflection.Emit;
 
 namespace RemoveMultiplayerPlayerLimit;
 
 public static partial class ModEntry
 {
-	private static readonly MethodInfo? WriterWriteIntWithBitsMethod = AccessTools.Method(typeof(PacketWriter), nameof(PacketWriter.WriteInt), new[] { typeof(int), typeof(int) });
+	private static readonly MethodInfo WriterWriteIntWithBitsMethod = typeof(PacketWriter).GetMethod(nameof(PacketWriter.WriteInt));
 
-	private static readonly MethodInfo? ReaderReadIntWithBitsMethod = AccessTools.Method(typeof(PacketReader), nameof(PacketReader.ReadInt), new[] { typeof(int) });
+	private static readonly MethodInfo ReaderReadIntWithBitsMethod = typeof(PacketReader).GetMethod(nameof(PacketReader.ReadInt));
 
-	private static readonly MethodInfo? WriterWriteListWithBitsMethod = typeof(PacketWriter).GetMethods(BindingFlags.Public | BindingFlags.Instance)
-		.FirstOrDefault((MethodInfo m) => m.Name == nameof(PacketWriter.WriteList) && m.IsGenericMethodDefinition && m.GetParameters().Length == 2 && m.GetParameters()[1].ParameterType == typeof(int));
+	private static readonly MethodInfo WriterWriteListWithBitsMethod = typeof(PacketWriter).GetMethod(nameof(PacketWriter.WriteList));
 
-	private static readonly MethodInfo? ReaderReadListWithBitsMethod = typeof(PacketReader).GetMethods(BindingFlags.Public | BindingFlags.Instance)
-		.FirstOrDefault((MethodInfo m) => m.Name == nameof(PacketReader.ReadList) && m.IsGenericMethodDefinition && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(int));
-
-	private static readonly int LdcI4MinOpcodeValue = OpCodes.Ldc_I4_M1.Value;
-
-	private static readonly int LdcI4MaxOpcodeValue = OpCodes.Ldc_I4_8.Value;
-
-	private static readonly int LdcI4SOpcodeValue = OpCodes.Ldc_I4_S.Value;
-
-	private static readonly int LdcI4OpcodeValue = OpCodes.Ldc_I4.Value;
+	private static readonly MethodInfo ReaderReadListWithBitsMethod = typeof(PacketReader).GetMethod(nameof(PacketReader.ReadList));
 
 	[HarmonyPatch(typeof(NetHostGameService), nameof(NetHostGameService.StartENetHost))]
 	private static class StartENetHostPatch
 	{
-		private static void Prefix(ref int maxClients) => maxClients = EnsureMin(maxClients, TargetPlayerLimit);
+		private static void Prefix(ref int maxClients) => maxClients = Math.Max(maxClients, Option.PlayerLimit);
 	}
 
 	[HarmonyPatch(typeof(NetHostGameService), nameof(NetHostGameService.StartSteamHost))]
 	private static class StartSteamHostPatch
 	{
-		private static void Prefix(ref int maxClients) => maxClients = EnsureMin(maxClients, TargetPlayerLimit);
+		private static void Prefix(ref int maxClients) => maxClients = EnsureMin(maxClients, Option.PlayerLimit);
 	}
 
 	[HarmonyPatch(typeof(StartRunLobby), MethodType.Constructor, typeof(GameMode), typeof(INetGameService), typeof(IStartRunLobbyListener), typeof(int))]
@@ -51,10 +43,8 @@ public static partial class ModEntry
 	{
 		private static void Postfix(StartRunLobby __instance, INetGameService netService)
 		{
-			if (netService.Type == NetGameType.Host && __instance.MaxPlayers < TargetPlayerLimit && MaxPlayersField != null)
-			{
-				MaxPlayersField.SetValue(__instance, TargetPlayerLimit);
-			}
+			if (netService.Type == NetGameType.Host && __instance.MaxPlayers < Option.PlayerLimit)
+				typeof(StartRunLobby).GetProperty(nameof(StartRunLobby.MaxPlayers)).GetSetMethod(true)?.Invoke(__instance, [ Option.PlayerLimit ]);
 		}
 	}
 
@@ -94,83 +84,46 @@ public static partial class ModEntry
 		private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions) => ReplaceBitWidthBeforeCall(instructions, ReaderReadListWithBitsMethod, VanillaLobbyListLengthBits, LobbyListLengthBits, nameof(LobbyBeginRunDeserializePatch));
 	}
 
-	private static IEnumerable<CodeInstruction> ReplaceBitWidthBeforeCall(IEnumerable<CodeInstruction> instructions, MethodInfo? targetMethod, int sourceBitWidth, int targetBitWidth, string patchName)
+	private static IEnumerable<CodeInstruction> ReplaceBitWidthBeforeCall(IEnumerable<CodeInstruction> instructions, MethodInfo targetMethod, int sourceBitWidth, int targetBitWidth, string patchName)
 	{
-		MethodInfo resolvedTargetMethod = targetMethod ?? throw new InvalidOperationException($"{patchName}: target method is null.");
-		List<CodeInstruction> list = instructions.ToList();
-		int count = 0;
-		for (int i = 0; i < list.Count; i++)
+		var resolvedTargetMethod = targetMethod ?? throw new InvalidOperationException($"{patchName}: target method is null.");
+
+        List<CodeInstruction> codes = [.. instructions];
+
+		var replace = false;
+
+        foreach (var instruction in codes)
 		{
-			if (!IsCallToMethod(list[i], resolvedTargetMethod))
+			if (instruction.Calls(resolvedTargetMethod) && codes.TryGetLast(instruction, out var last) && TestLdcI4(last, sourceBitWidth))
 			{
-				continue;
-			}
-			int num = FindBitWidthLoadIndex(list, i, sourceBitWidth);
-			if (num < 0)
-			{
-				continue;
-			}
-			list[num] = CloneWithNewIntOperand(list[num], targetBitWidth);
-			count++;
+                last.opcode = OpCodes.Ldc_I4;
+
+				last.operand = targetBitWidth;
+
+				replace = true;
+            }
 		}
-		if (count == 0)
-		{
+
+		if (!replace)
 			throw new InvalidOperationException($"{patchName}: no bit-width operand replaced, game code may have changed.");
-		}
-		return list;
+
+		return codes;
 	}
 
-	private static int FindBitWidthLoadIndex(IReadOnlyList<CodeInstruction> instructions, int callIndex, int expectedValue)
-	{
-		int num = Math.Max(0, callIndex - 4);
-		for (int i = callIndex - 1; i >= num; i--)
-		{
-			if (instructions[i].opcode == OpCodes.Nop)
-			{
-				continue;
-			}
-			int? ldcI4Value = ReadLdcI4Nullable(instructions[i]);
-			if (!ldcI4Value.HasValue)
-			{
-				return -1;
-			}
-			return ldcI4Value.Value == expectedValue ? i : -1;
-		}
-		return -1;
-	}
+	private static bool TryReadLdcI4(CodeInstruction instruction, out int? value)
+    {
+        var v = instruction.opcode.Value;
 
-	private static CodeInstruction CloneWithNewIntOperand(CodeInstruction source, int newValue)
-	{
-		CodeInstruction codeInstruction = new CodeInstruction(OpCodes.Ldc_I4, newValue);
-		codeInstruction.labels.AddRange(source.labels);
-		codeInstruction.blocks.AddRange(source.blocks);
-		return codeInstruction;
-	}
+        value = v switch
+        {
+            >= 21 and <= 30 => v - 22,
+            31 => (sbyte)instruction.operand,
+            32 => (int)instruction.operand,
+            _ => null
+        };
 
-	private static bool IsCallToMethod(CodeInstruction instruction, MethodInfo targetMethod)
-	{
-		if ((instruction.opcode != OpCodes.Call && instruction.opcode != OpCodes.Callvirt) || instruction.operand is not MethodInfo methodInfo)
-		{
-			return false;
-		}
-		if (methodInfo == targetMethod)
-		{
-			return true;
-		}
-		MethodInfo methodInfo2 = methodInfo.IsGenericMethod ? methodInfo.GetGenericMethodDefinition() : methodInfo;
-		MethodInfo methodInfo3 = targetMethod.IsGenericMethod ? targetMethod.GetGenericMethodDefinition() : targetMethod;
-		return methodInfo2 == methodInfo3;
-	}
+        return value != null;
+    }
 
-	private static int? ReadLdcI4Nullable(CodeInstruction instruction)
-	{
-		int opcodeValue = instruction.opcode.Value;
-		return opcodeValue switch
-		{
-			_ when opcodeValue >= LdcI4MinOpcodeValue && opcodeValue <= LdcI4MaxOpcodeValue => opcodeValue - (LdcI4MinOpcodeValue + 1),
-			_ when opcodeValue == LdcI4SOpcodeValue && instruction.operand is sbyte sb => sb,
-			_ when opcodeValue == LdcI4OpcodeValue && instruction.operand is int num => num,
-			_ => null
-		};
-	}
+	private static bool TestLdcI4(CodeInstruction instruction, int value) => TryReadLdcI4(instruction, out var v) && v == value;
 }
