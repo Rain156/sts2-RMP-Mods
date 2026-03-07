@@ -1,19 +1,17 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Reflection;
-using System.Text.Json;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.RestSite;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Modding;
-using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Nodes.RestSite;
-using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
-using RemoveMultiplayerPlayetLimit.src;
+using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Runs;
+using RemoveMultiplayerPlayetLimit.src;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
 
 namespace RemoveMultiplayerPlayerLimit;
 
@@ -48,19 +46,19 @@ public static partial class ModEntry
 
 	public static void Initialize()
 	{
-		LoadOptions();
+        LoadOptions();
 
-		SlotIdBits = RequiredBitsForExclusiveUpperBound(Option.PlayerLimit);
+        SlotIdBits = RequiredBitsForExclusiveUpperBound(Option.PlayerLimit);
 
-		LobbyListLengthBits = RequiredBitsForExclusiveUpperBound(Option.PlayerLimit + 1);
+        LobbyListLengthBits = RequiredBitsForExclusiveUpperBound(Option.PlayerLimit + 1);
 
-		SlotIdCapacity = 1 << SlotIdBits;
+        SlotIdCapacity = 1 << SlotIdBits;
 
-		LobbyListLengthCapacity = 1 << LobbyListLengthBits;
+        LobbyListLengthCapacity = 1 << LobbyListLengthBits;
 
-		Harmony.PatchAll();
+        Harmony.PatchAll();
 
-		Log.Info($"RemoveMultiplayerPlayerLimit loaded. Target limit: {Option.PlayerLimit}, slot capacity: {SlotIdCapacity}, lobby list capacity: {LobbyListLengthCapacity}");
+        Log.Info($"RemoveMultiplayerPlayerLimit loaded. Target limit: {Option.PlayerLimit}, slot capacity: {SlotIdCapacity}, lobby list capacity: {LobbyListLengthCapacity}");
 	}
 
 	private static void LoadOptions()
@@ -125,8 +123,6 @@ public static partial class ModEntry
 
 		return Math.Max(1, (int)Math.Ceiling(Math.Log2(upperBound)));
 	}
-
-	private static int EnsureMin(int value, int min) => Math.Max(value, min);
 
 	private static bool TryGetCharacter(NRestSiteRoom room, ulong playerId, out NRestSiteCharacter character)
 	{

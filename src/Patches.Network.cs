@@ -35,7 +35,7 @@ public static partial class ModEntry
 	[HarmonyPatch(typeof(NetHostGameService), nameof(NetHostGameService.StartSteamHost))]
 	private static class StartSteamHostPatch
 	{
-		private static void Prefix(ref int maxClients) => maxClients = EnsureMin(maxClients, Option.PlayerLimit);
+		private static void Prefix(ref int maxClients) => maxClients = Math.Max(maxClients, Option.PlayerLimit);
 	}
 
 	[HarmonyPatch(typeof(StartRunLobby), MethodType.Constructor, typeof(GameMode), typeof(INetGameService), typeof(IStartRunLobbyListener), typeof(int))]
