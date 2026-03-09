@@ -31,21 +31,28 @@ public static partial class ModEntry
 	private static void RepositionMerchantVisuals(IReadOnlyList<NMerchantCharacter> visuals)
 	{
 		if (visuals.Count <= VanillaMultiplayerHolderCount)
-		{
 			return;
-		}
+
 		int rowCount = visuals.Count <= VanillaMultiplayerHolderCount * 2 ? 2 : Mathf.CeilToInt((float)visuals.Count / VanillaMultiplayerHolderCount);
+
 		int columnCount = Mathf.CeilToInt((float)visuals.Count / rowCount);
+
 		int visualIndex = 0;
+
 		for (int row = 0; row < rowCount; row++)
 		{
 			float x = MerchantForwardShiftX + MerchantRowStartOffsetX * row;
+
 			float y = MerchantForwardShiftY + MerchantRowStepY * row;
+
 			for (int column = 0; column < columnCount && visualIndex < visuals.Count; column++)
 			{
 				NMerchantCharacter nMerchantCharacter = visuals[visualIndex];
+
 				nMerchantCharacter.Position = new Vector2(x, y);
+
 				x += MerchantColumnStepX;
+
 				visualIndex++;
 			}
 		}

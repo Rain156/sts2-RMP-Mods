@@ -1,186 +1,159 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Reflection;
-using System.Text.Json;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.RestSite;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Modding;
-using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Nodes.RestSite;
+using MegaCrit.Sts2.Core.Nodes.Rooms;
+using MegaCrit.Sts2.Core.Runs;
+using RemoveMultiplayerPlayerLimit.src;
+using RemoveMultiplayerPlayetLimit.src;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
 
 namespace RemoveMultiplayerPlayerLimit;
 
 [ModInitializer("Initialize")]
 public static partial class ModEntry
 {
-	private const int DefaultPlayerLimit = 8;
+	public static Option Option { get; set; }
 
-	private const int MinSupportedPlayerLimit = 4;
+	public static Harmony Harmony { get; set; } = new("Rain156.RemoveMultiplayerPlayerLimit");
 
-	private const int MaxSupportedPlayerLimit = 16;
+    internal const int DefaultPlayerLimit = 8;
 
-	private const int VanillaSlotIdBits = 2;
+    internal const int MinSupportedPlayerLimit = 4;
 
-	private const int VanillaLobbyListLengthBits = 3;
+    internal const int MaxSupportedPlayerLimit = 16;
 
-	private const string ModFolderName = "RemoveMultiplayerPlayerLimit";
+    internal const int VanillaSlotIdBits = 2;
 
-	private const string ConfigFileName = "config.json";
+    internal const int VanillaLobbyListLengthBits = 3;
 
-	private static int TargetPlayerLimit { get; set; } = DefaultPlayerLimit;
+    internal const string ModFolderName = "RemoveMultiplayerPlayerLimit";
 
-	private static int SlotIdBits { get; set; } = RequiredBitsForExclusiveUpperBound(DefaultPlayerLimit);
+    internal const string ConfigFileName = "config.json";
 
-	private static int LobbyListLengthBits { get; set; } = RequiredBitsForExclusiveUpperBound(DefaultPlayerLimit + 1);
+    private static int SlotIdBits { get; set; }
 
-	private static int SlotIdCapacity { get; set; } = 1 << RequiredBitsForExclusiveUpperBound(DefaultPlayerLimit);
+    private static int LobbyListLengthBits { get; set; }
 
-	private static int LobbyListLengthCapacity { get; set; } = 1 << RequiredBitsForExclusiveUpperBound(DefaultPlayerLimit + 1);
+	private static int SlotIdCapacity { get; set; }
 
-	private static readonly FieldInfo? MaxPlayersField = AccessTools.Field(typeof(MegaCrit.Sts2.Core.Multiplayer.Game.Lobby.StartRunLobby), "<MaxPlayers>k__BackingField");
+	private static int LobbyListLengthCapacity { get; set; }
 
 	public static void Initialize()
 	{
-		TargetPlayerLimit = LoadOrCreatePlayerLimit();
-		SlotIdBits = RequiredBitsForExclusiveUpperBound(TargetPlayerLimit);
-		LobbyListLengthBits = RequiredBitsForExclusiveUpperBound(TargetPlayerLimit + 1);
-		SlotIdCapacity = 1 << SlotIdBits;
-		LobbyListLengthCapacity = 1 << LobbyListLengthBits;
-		if (TargetPlayerLimit > SlotIdCapacity)
-		{
-			throw new InvalidOperationException($"TargetPlayerLimit {TargetPlayerLimit} exceeds slot id capacity {SlotIdCapacity}.");
-		}
-		if (TargetPlayerLimit > LobbyListLengthCapacity)
-		{
-			throw new InvalidOperationException($"TargetPlayerLimit {TargetPlayerLimit} exceeds lobby list capacity {LobbyListLengthCapacity}.");
-		}
-		new Harmony("cn.remove.multiplayer.playerlimit").PatchAll();
-		Log.Info($"RemoveMultiplayerPlayerLimit loaded. Target limit: {TargetPlayerLimit}, slot capacity: {SlotIdCapacity}, lobby list capacity: {LobbyListLengthCapacity}");
-	}
-
-	private static int LoadOrCreatePlayerLimit()
-	{
-		string modDirectory = ResolveModDirectory();
-		Directory.CreateDirectory(modDirectory);
-		string configPath = Path.Combine(modDirectory, ConfigFileName);
-		if (!File.Exists(configPath))
-		{
-			WriteDefaultConfig(configPath, DefaultPlayerLimit);
-			return DefaultPlayerLimit;
-		}
 		try
 		{
-			using JsonDocument jsonDocument = JsonDocument.Parse(File.ReadAllText(configPath));
-			if (jsonDocument.RootElement.TryGetProperty("max_player_limit", out JsonElement value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int rawLimit))
-			{
-				int clampedLimit = Math.Clamp(rawLimit, MinSupportedPlayerLimit, MaxSupportedPlayerLimit);
-				if (clampedLimit != rawLimit)
-				{
-					WriteDefaultConfig(configPath, clampedLimit);
-				}
-				return clampedLimit;
-			}
+            LoadOptions();
+
+            SlotIdBits = RequiredBitsForExclusiveUpperBound(Option.PlayerLimit);
+
+            LobbyListLengthBits = RequiredBitsForExclusiveUpperBound(Option.PlayerLimit + 1);
+
+            SlotIdCapacity = 1 << SlotIdBits;
+
+            LobbyListLengthCapacity = 1 << LobbyListLengthBits;
+
+            Harmony.PatchAll();
+
+            Log.Info($"RemoveMultiplayerPlayerLimit loaded. Target limit: {Option.PlayerLimit}, slot capacity: {SlotIdCapacity}, lobby list capacity: {LobbyListLengthCapacity}");
+        }
+		catch (Exception e)
+		{
+            File.AppendAllText(Path.Combine(Pathes.RootPath, "logs.txt"), e.Message + e.StackTrace);
+        }
+	}
+
+	private static void LoadOptions()
+	{
+		string configPath = Pathes.ConfigPath;
+
+		if (!File.Exists(configPath))
 			WriteDefaultConfig(configPath, DefaultPlayerLimit);
-			return DefaultPlayerLimit;
+
+		try
+		{
+			Option = JsonSerializer.Deserialize<Option>(File.ReadAllText(configPath));
+
+            var clampedLimit = Math.Clamp(Option.PlayerLimit, MinSupportedPlayerLimit, MaxSupportedPlayerLimit);
+
+            if (clampedLimit != Option.PlayerLimit)
+			{
+				Option.PlayerLimit = clampedLimit;
+
+                WriteDefaultConfig(configPath, clampedLimit);
+            }
 		}
 		catch (Exception ex)
 		{
 			Log.Warn($"Failed to parse config at {configPath}: {ex.Message}");
+
 			BackupCorruptedConfig(configPath);
 		}
-		WriteDefaultConfig(configPath, DefaultPlayerLimit);
-		return DefaultPlayerLimit;
 	}
 
-	private static string ResolveModDirectory()
-	{
-		string? assemblyLocation = Assembly.GetExecutingAssembly().Location;
-		string? assemblyDirectory = string.IsNullOrWhiteSpace(assemblyLocation) ? null : Path.GetDirectoryName(assemblyLocation);
-		if (!string.IsNullOrWhiteSpace(assemblyDirectory) && Directory.Exists(assemblyDirectory))
-		{
-			return assemblyDirectory;
-		}
-		string fallbackModDirectory = Path.Combine(AppContext.BaseDirectory, "mods", ModFolderName);
-		if (Directory.Exists(fallbackModDirectory))
-		{
-			return fallbackModDirectory;
-		}
-		return AppContext.BaseDirectory;
-	}
+	private static JsonSerializerOptions _defaultOption = new() { WriteIndented = true };
 
 	private static void WriteDefaultConfig(string configPath, int playerLimit)
 	{
-		// min_supported / max_supported are informational fields for users and are not parsed.
-		string contents = JsonSerializer.Serialize(new Dictionary<string, int>
+        // min_player / max_player are informational fields for users and are not parsed.
+        string contents = JsonSerializer.Serialize(new Dictionary<string, int>
 		{
-			["max_player_limit"] = playerLimit,
-			["min_supported"] = MinSupportedPlayerLimit,
-			["max_supported"] = MaxSupportedPlayerLimit
-		}, new JsonSerializerOptions
-		{
-			WriteIndented = true
-		});
+			["player_limit"] = playerLimit,
+            ["min_player"] = MinSupportedPlayerLimit,
+            ["max_player"] = MaxSupportedPlayerLimit
+        }, _defaultOption);
+
 		File.WriteAllText(configPath, contents);
 	}
 
 	private static void BackupCorruptedConfig(string configPath)
 	{
 		if (!File.Exists(configPath))
-		{
 			return;
-		}
+
 		string backupPath = $"{configPath}.bak";
+
 		if (File.Exists(backupPath))
-		{
 			backupPath = $"{configPath}.{DateTime.Now:yyyyMMddHHmmss}.bak";
-		}
+
 		File.Move(configPath, backupPath);
 	}
 
 	private static int RequiredBitsForExclusiveUpperBound(int upperBound)
 	{
-		int normalizedBound = Math.Max(1, upperBound);
-		int bitCount = 0;
-		int capacity = 1;
-		while (capacity < normalizedBound)
-		{
-			bitCount++;
-			capacity <<= 1;
-		}
-		return Math.Max(1, bitCount);
-	}
+		upperBound = Math.Max(1, upperBound);
 
-	private static int EnsureMin(int value, int min) => Math.Max(value, min);
+		return Math.Max(1, (int)Math.Ceiling(Math.Log2(upperBound)));
+	}
 
 	private static bool TryGetCharacter(NRestSiteRoom room, ulong playerId, out NRestSiteCharacter character)
 	{
-		NRestSiteCharacter? nRestSiteCharacter = room.Characters.FirstOrDefault((NRestSiteCharacter c) => c.Player.NetId == playerId);
-		if (nRestSiteCharacter == null)
-		{
-			character = null!;
-			return false;
-		}
-		character = nRestSiteCharacter;
-		return true;
+		character = room.Characters.FirstOrDefault(c => c.Player.NetId == playerId, null);
+
+		return character != null;
 	}
 
-	private static RestSiteOption? TryGetHoveredOption(ulong playerId)
+	private static RestSiteOption GetHoveredOption(ulong playerId)
 	{
-		int? hoveredOptionIndex = MegaCrit.Sts2.Core.Runs.RunManager.Instance.RestSiteSynchronizer.GetHoveredOptionIndex(playerId);
-		if (!hoveredOptionIndex.HasValue)
-		{
+		var hoveredOptionIndex = RunManager.Instance.RestSiteSynchronizer.GetHoveredOptionIndex(playerId);
+
+        if (!hoveredOptionIndex.HasValue)
 			return null;
-		}
-		IReadOnlyList<RestSiteOption> optionsForPlayer = MegaCrit.Sts2.Core.Runs.RunManager.Instance.RestSiteSynchronizer.GetOptionsForPlayer(playerId);
+
+		var optionsForPlayer = RunManager.Instance.RestSiteSynchronizer.GetOptionsForPlayer(playerId);
+
 		int value = hoveredOptionIndex.Value;
-		if ((uint)value >= (uint)optionsForPlayer.Count)
-		{
+
+		if (value >= optionsForPlayer.Count)
 			return null;
-		}
+
 		return optionsForPlayer[value];
 	}
 
