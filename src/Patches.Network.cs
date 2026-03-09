@@ -115,14 +115,14 @@ public static partial class ModEntry
 		}
 		if (count == 0)
 		{
-			throw new InvalidOperationException($"{patchName}: no bit-width operand replaced, game code may have changed.");
+			throw new InvalidOperationException($"{patchName}: no bit-width operand replaced for method {resolvedTargetMethod.Name} ({sourceBitWidth}->{targetBitWidth}), game code may have changed.");
 		}
 		return list;
 	}
 
 	private static int FindBitWidthLoadIndex(IReadOnlyList<CodeInstruction> instructions, int callIndex, int expectedValue)
 	{
-		int num = Math.Max(0, callIndex - 4);
+		int num = Math.Max(0, callIndex - 8);
 		for (int i = callIndex - 1; i >= num; i--)
 		{
 			if (instructions[i].opcode == OpCodes.Nop)
@@ -130,13 +130,22 @@ public static partial class ModEntry
 				continue;
 			}
 			int? ldcI4Value = ReadLdcI4Nullable(instructions[i]);
-			if (!ldcI4Value.HasValue)
+			if (ldcI4Value.HasValue)
+			{
+				return ldcI4Value.Value == expectedValue ? i : -1;
+			}
+			if (IsTerminatingOpcode(instructions[i].opcode))
 			{
 				return -1;
 			}
-			return ldcI4Value.Value == expectedValue ? i : -1;
 		}
 		return -1;
+	}
+
+	private static bool IsTerminatingOpcode(OpCode opcode)
+	{
+		FlowControl flowControl = opcode.FlowControl;
+		return flowControl == FlowControl.Branch || flowControl == FlowControl.Cond_Branch || flowControl == FlowControl.Return || flowControl == FlowControl.Throw || flowControl == FlowControl.Call;
 	}
 
 	private static CodeInstruction CloneWithNewIntOperand(CodeInstruction source, int newValue)

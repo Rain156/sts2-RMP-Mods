@@ -23,6 +23,8 @@ public static partial class ModEntry
 
 	private const int MaxSupportedPlayerLimit = 16;
 
+	private const int VanillaMultiplayerHolderCount = 4;
+
 	private const int VanillaSlotIdBits = 2;
 
 	private const int VanillaLobbyListLengthBits = 3;
@@ -37,10 +39,6 @@ public static partial class ModEntry
 
 	private static int LobbyListLengthBits { get; set; } = RequiredBitsForExclusiveUpperBound(DefaultPlayerLimit + 1);
 
-	private static int SlotIdCapacity { get; set; } = 1 << RequiredBitsForExclusiveUpperBound(DefaultPlayerLimit);
-
-	private static int LobbyListLengthCapacity { get; set; } = 1 << RequiredBitsForExclusiveUpperBound(DefaultPlayerLimit + 1);
-
 	private static readonly FieldInfo? MaxPlayersField = AccessTools.Field(typeof(MegaCrit.Sts2.Core.Multiplayer.Game.Lobby.StartRunLobby), "<MaxPlayers>k__BackingField");
 
 	public static void Initialize()
@@ -48,18 +46,10 @@ public static partial class ModEntry
 		TargetPlayerLimit = LoadOrCreatePlayerLimit();
 		SlotIdBits = RequiredBitsForExclusiveUpperBound(TargetPlayerLimit);
 		LobbyListLengthBits = RequiredBitsForExclusiveUpperBound(TargetPlayerLimit + 1);
-		SlotIdCapacity = 1 << SlotIdBits;
-		LobbyListLengthCapacity = 1 << LobbyListLengthBits;
-		if (TargetPlayerLimit > SlotIdCapacity)
-		{
-			throw new InvalidOperationException($"TargetPlayerLimit {TargetPlayerLimit} exceeds slot id capacity {SlotIdCapacity}.");
-		}
-		if (TargetPlayerLimit > LobbyListLengthCapacity)
-		{
-			throw new InvalidOperationException($"TargetPlayerLimit {TargetPlayerLimit} exceeds lobby list capacity {LobbyListLengthCapacity}.");
-		}
+		int slotIdCapacity = 1 << SlotIdBits;
+		int lobbyListLengthCapacity = 1 << LobbyListLengthBits;
 		new Harmony("cn.remove.multiplayer.playerlimit").PatchAll();
-		Log.Info($"RemoveMultiplayerPlayerLimit loaded. Target limit: {TargetPlayerLimit}, slot capacity: {SlotIdCapacity}, lobby list capacity: {LobbyListLengthCapacity}");
+		Log.Info($"RemoveMultiplayerPlayerLimit loaded. Target limit: {TargetPlayerLimit}, slot bits: {SlotIdBits}, slot capacity: {slotIdCapacity}, lobby bits: {LobbyListLengthBits}, lobby list capacity: {lobbyListLengthCapacity}");
 	}
 
 	private static int LoadOrCreatePlayerLimit()
@@ -109,7 +99,8 @@ public static partial class ModEntry
 		{
 			return fallbackModDirectory;
 		}
-		return AppContext.BaseDirectory;
+		string appDataRoot = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+		return Path.Combine(appDataRoot, "StS2Mods", ModFolderName);
 	}
 
 	private static void WriteDefaultConfig(string configPath, int playerLimit)
