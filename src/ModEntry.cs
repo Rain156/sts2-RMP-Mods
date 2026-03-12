@@ -1,3 +1,4 @@
+using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.RestSite;
@@ -126,14 +127,9 @@ public static partial class ModEntry
 		File.Move(configPath, backupPath);
 	}
 
-	private static int RequiredBitsForExclusiveUpperBound(int upperBound)
-	{
-		upperBound = Math.Max(1, upperBound);
+	private static int RequiredBitsForExclusiveUpperBound(int upperBound) => Mathf.CeilToInt(Math.Log2(upperBound));
 
-		return Math.Max(1, (int)Math.Ceiling(Math.Log2(upperBound)));
-	}
-
-	private static bool TryGetCharacter(NRestSiteRoom room, ulong playerId, out NRestSiteCharacter character)
+    private static bool TryGetCharacter(NRestSiteRoom room, ulong playerId, out NRestSiteCharacter character)
 	{
 		character = room.Characters.FirstOrDefault(c => c.Player.NetId == playerId, null);
 

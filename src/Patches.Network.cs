@@ -1,12 +1,17 @@
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
+using MegaCrit.Sts2.Core.Logging;
+using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Characters;
 using MegaCrit.Sts2.Core.Models.Events;
+using MegaCrit.Sts2.Core.Models.Monsters;
 using MegaCrit.Sts2.Core.Multiplayer;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
 using MegaCrit.Sts2.Core.Multiplayer.Messages.Lobby;
 using MegaCrit.Sts2.Core.Multiplayer.Serialization;
 using MegaCrit.Sts2.Core.Runs;
+using MegaCrit.Sts2.Core.Unlocks;
 using RemoveMultiplayerPlayerLimit.src;
 using RemoveMultiplayerPlayetLimit.src.Extensions;
 using System;
@@ -43,27 +48,26 @@ public static partial class ModEntry
 	[HarmonyPatch(typeof(StartRunLobby), MethodType.Constructor, typeof(GameMode), typeof(INetGameService), typeof(IStartRunLobbyListener), typeof(int))]
 	private static class StartRunLobbyConstructorPatch
 	{
-		private static void Postfix(StartRunLobby __instance, INetGameService netService)
+		private static void Prefix(INetGameService netService, ref int maxPlayers)
 		{
-			if (netService.Type == NetGameType.Host && __instance.MaxPlayers < Option.PlayerLimit)
-				typeof(StartRunLobby).GetProperty(nameof(StartRunLobby.MaxPlayers)).GetSetMethod(true)?.Invoke(__instance, [ Option.PlayerLimit ]);
+			if (netService.Type == NetGameType.Host && maxPlayers < Option.PlayerLimit)
+                maxPlayers = Option.PlayerLimit;
 		}
 	}
 
 	[HarmonyPatch(typeof(LobbyPlayer), nameof(LobbyPlayer.Serialize))]
-	private static class LobbyPlayerSerializePatch
+    private static class LobbyPlayerSerializePatch
 	{
-		private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions) => ReplaceBitWidthBeforeCall(instructions, WriterWriteIntWithBitsMethod, VanillaSlotIdBits, SlotIdBits, nameof(LobbyPlayerSerializePatch));
+        private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions) => ReplaceBitWidthBeforeCall(instructions, WriterWriteIntWithBitsMethod, VanillaSlotIdBits, SlotIdBits, nameof(LobbyPlayerSerializePatch));
 	}
 
 	[HarmonyPatch(typeof(LobbyPlayer), nameof(LobbyPlayer.Deserialize))]
 	private static class LobbyPlayerDeserializePatch
 	{
 		private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions) => ReplaceBitWidthBeforeCall(instructions, ReaderReadIntWithBitsMethod, VanillaSlotIdBits, SlotIdBits, nameof(LobbyPlayerDeserializePatch));
-	}
+    }
 
 	[HarmonyPatch(typeof(ClientLobbyJoinResponseMessage), nameof(ClientLobbyJoinResponseMessage.Serialize))]
-	[HarmonyDebug]
     private static class ClientLobbyJoinResponseSerializePatch
 	{
 		private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions) => ReplaceBitWidthBeforeCall(instructions, WriterWriteListWithBitsMethod, VanillaLobbyListLengthBits, LobbyListLengthBits, nameof(ClientLobbyJoinResponseSerializePatch));
@@ -110,7 +114,7 @@ public static partial class ModEntry
 		if (!replace)
             throw new InvalidOperationException($"{patchName}: no bit-width operand replaced, game code may have changed.");
 
-        return codes;
+        return codes.AsEnumerable();
 	}
 
     private static bool TryReadLdcI4(CodeInstruction instruction, out int? value)
