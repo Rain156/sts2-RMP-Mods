@@ -48,7 +48,7 @@ This mod elegantly increases the multiplayer lobby limit. By default, it perfect
 
 macOS requires placing the mod inside the `.app` bundle and running the game under Rosetta 2.
 
-> **Note:** Online multiplayer has not been tested on macOS. The mod is only confirmed to launch correctly and show as loaded in the bottom-right corner.
+> **Note:** Some macOS players hit `unknown ca` / `BadCert` errors when joining multiplayer. This mod now enables a macOS-only TLS workaround during multiplayer handshakes. If you need the original behavior, set `macos_tls_workaround` to `false` in `config.json`.
 
 1. Download the latest `sts2-RMP-[version].zip` from the **Releases** page.
 2. Extract the archive and copy the inner `RemoveMultiplayerPlayerLimit` folder to:
@@ -78,6 +78,7 @@ After launching the game with the mod enabled for the first time, a `config.json
 ```json
 {
   "max_player_limit": 8,
+  "macos_tls_workaround": true,
   "min_supported": 4,
   "max_supported": 16
 }

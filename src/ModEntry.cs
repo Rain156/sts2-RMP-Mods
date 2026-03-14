@@ -23,6 +23,8 @@ public static partial class ModEntry
 
 	private const int MaxSupportedPlayerLimit = 16;
 
+	private const bool DefaultMacOsTlsWorkaroundEnabled = true;
+
 	private const int VanillaMultiplayerHolderCount = 4;
 
 	private const int VanillaSlotIdBits = 2;
@@ -39,51 +41,83 @@ public static partial class ModEntry
 
 	private static int LobbyListLengthBits { get; set; } = RequiredBitsForExclusiveUpperBound(DefaultPlayerLimit + 1);
 
+	private static bool MacOsTlsWorkaroundEnabled { get; set; } = DefaultMacOsTlsWorkaroundEnabled;
+
 	private static readonly FieldInfo? MaxPlayersField = AccessTools.Field(typeof(MegaCrit.Sts2.Core.Multiplayer.Game.Lobby.StartRunLobby), "<MaxPlayers>k__BackingField");
 
 	public static void Initialize()
 	{
-		TargetPlayerLimit = LoadOrCreatePlayerLimit();
+		ModConfig config = LoadOrCreateConfig();
+		TargetPlayerLimit = config.MaxPlayerLimit;
+		MacOsTlsWorkaroundEnabled = config.MacOsTlsWorkaroundEnabled;
 		SlotIdBits = RequiredBitsForExclusiveUpperBound(TargetPlayerLimit);
 		LobbyListLengthBits = RequiredBitsForExclusiveUpperBound(TargetPlayerLimit + 1);
 		int slotIdCapacity = 1 << SlotIdBits;
 		int lobbyListLengthCapacity = 1 << LobbyListLengthBits;
 		new Harmony("cn.remove.multiplayer.playerlimit").PatchAll();
-		Log.Info($"RemoveMultiplayerPlayerLimit loaded. Target limit: {TargetPlayerLimit}, slot bits: {SlotIdBits}, slot capacity: {slotIdCapacity}, lobby bits: {LobbyListLengthBits}, lobby list capacity: {lobbyListLengthCapacity}");
+		Log.Info($"RemoveMultiplayerPlayerLimit loaded. Target limit: {TargetPlayerLimit}, slot bits: {SlotIdBits}, slot capacity: {slotIdCapacity}, lobby bits: {LobbyListLengthBits}, lobby list capacity: {lobbyListLengthCapacity}, macOS TLS workaround: {MacOsTlsWorkaroundEnabled}");
 	}
 
-	private static int LoadOrCreatePlayerLimit()
+	private static ModConfig LoadOrCreateConfig()
 	{
 		string modDirectory = ResolveModDirectory();
 		Directory.CreateDirectory(modDirectory);
 		string configPath = Path.Combine(modDirectory, ConfigFileName);
 		if (!File.Exists(configPath))
 		{
-			WriteDefaultConfig(configPath, DefaultPlayerLimit);
-			return DefaultPlayerLimit;
+			ModConfig defaultConfig = new ModConfig(DefaultPlayerLimit, DefaultMacOsTlsWorkaroundEnabled);
+			WriteDefaultConfig(configPath, defaultConfig);
+			return defaultConfig;
 		}
 		try
 		{
 			using JsonDocument jsonDocument = JsonDocument.Parse(File.ReadAllText(configPath));
-			if (jsonDocument.RootElement.TryGetProperty("max_player_limit", out JsonElement value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int rawLimit))
+			bool needsRewrite = false;
+			int playerLimit = DefaultPlayerLimit;
+			if (jsonDocument.RootElement.TryGetProperty("max_player_limit", out JsonElement limitElement) && limitElement.ValueKind == JsonValueKind.Number && limitElement.TryGetInt32(out int rawLimit))
 			{
-				int clampedLimit = Math.Clamp(rawLimit, MinSupportedPlayerLimit, MaxSupportedPlayerLimit);
-				if (clampedLimit != rawLimit)
-				{
-					WriteDefaultConfig(configPath, clampedLimit);
-				}
-				return clampedLimit;
+				playerLimit = Math.Clamp(rawLimit, MinSupportedPlayerLimit, MaxSupportedPlayerLimit);
+				needsRewrite = playerLimit != rawLimit;
 			}
-			WriteDefaultConfig(configPath, DefaultPlayerLimit);
-			return DefaultPlayerLimit;
+			else
+			{
+				needsRewrite = true;
+			}
+			bool macOsTlsWorkaroundEnabled = DefaultMacOsTlsWorkaroundEnabled;
+			if (jsonDocument.RootElement.TryGetProperty("macos_tls_workaround", out JsonElement tlsElement))
+			{
+				if (tlsElement.ValueKind == JsonValueKind.True)
+				{
+					macOsTlsWorkaroundEnabled = true;
+				}
+				else if (tlsElement.ValueKind == JsonValueKind.False)
+				{
+					macOsTlsWorkaroundEnabled = false;
+				}
+				else
+				{
+					needsRewrite = true;
+				}
+			}
+			else
+			{
+				needsRewrite = true;
+			}
+			ModConfig config = new ModConfig(playerLimit, macOsTlsWorkaroundEnabled);
+			if (needsRewrite)
+			{
+				WriteDefaultConfig(configPath, config);
+			}
+			return config;
 		}
 		catch (Exception ex)
 		{
 			Log.Warn($"Failed to parse config at {configPath}: {ex.Message}");
 			BackupCorruptedConfig(configPath);
 		}
-		WriteDefaultConfig(configPath, DefaultPlayerLimit);
-		return DefaultPlayerLimit;
+		ModConfig fallbackConfig = new ModConfig(DefaultPlayerLimit, DefaultMacOsTlsWorkaroundEnabled);
+		WriteDefaultConfig(configPath, fallbackConfig);
+		return fallbackConfig;
 	}
 
 	private static string ResolveModDirectory()
@@ -103,12 +137,13 @@ public static partial class ModEntry
 		return Path.Combine(appDataRoot, "StS2Mods", ModFolderName);
 	}
 
-	private static void WriteDefaultConfig(string configPath, int playerLimit)
+	private static void WriteDefaultConfig(string configPath, ModConfig config)
 	{
 		// min_supported / max_supported are informational fields for users and are not parsed.
-		string contents = JsonSerializer.Serialize(new Dictionary<string, int>
+		string contents = JsonSerializer.Serialize(new Dictionary<string, object>
 		{
-			["max_player_limit"] = playerLimit,
+			["max_player_limit"] = config.MaxPlayerLimit,
+			["macos_tls_workaround"] = config.MacOsTlsWorkaroundEnabled,
 			["min_supported"] = MinSupportedPlayerLimit,
 			["max_supported"] = MaxSupportedPlayerLimit
 		}, new JsonSerializerOptions
@@ -176,4 +211,6 @@ public static partial class ModEntry
 	}
 
 	private static bool IsRemote(NRestSiteCharacter character) => !LocalContext.IsMe(character.Player);
+
+	private sealed record ModConfig(int MaxPlayerLimit, bool MacOsTlsWorkaroundEnabled);
 }
