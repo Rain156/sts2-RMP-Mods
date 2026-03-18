@@ -62,7 +62,7 @@ func add_external_dir(packer: PCKPacker, source_dir: String, target_dir: String)
 func _initialize():
 	var output_dir := "res://build"
 	var output_file := "res://build/RemoveMultiplayerPlayerLimit.pck"
-	var manifest_path := "res://mod_manifest.json"
+	var manifest_path := "res://RemoveMultiplayerPlayerLimit.json"
 	var project_dir := ProjectSettings.globalize_path("res://")
 	var external_asset_dir := project_dir.path_join("RemoveMultiplayerPlayerLimit")
 	DirAccess.make_dir_recursive_absolute(output_dir)
@@ -71,14 +71,17 @@ func _initialize():
 	if ok != OK:
 		push_error("pck_start failed: %s" % ok)
 		quit(1)
+		
 	var files := PackedStringArray([
 		manifest_path
 	])
+	
 	for file in files:
 		var add_ok := packer.add_file(file, file)
 		if add_ok != OK:
 			push_error("add_file failed: %s %s" % [file, add_ok])
 			quit(1)
+			
 	var add_external_ok := add_external_dir(packer, external_asset_dir, "res://RemoveMultiplayerPlayerLimit")
 	if add_external_ok != OK:
 		push_error("add_external_dir failed: %s" % add_external_ok)

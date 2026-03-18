@@ -7,7 +7,7 @@ $buildRoot = Join-Path $root "build"
 $releaseDir = Join-Path $root "build\RemoveMultiplayerPlayerLimit"
 $dllSource = Join-Path $root ".godot\mono\temp\bin\Debug\RemoveMultiplayerPlayerLimit.dll"
 $pckSource = Join-Path $root "build\RemoveMultiplayerPlayerLimit.pck"
-$manifestPath = Join-Path $root "mod_manifest.json"
+$manifestPathBeta = Join-Path $root "RemoveMultiplayerPlayerLimit.json"
 
 & $dotnet build (Join-Path $root "RemoveMultiplayerPlayerLimit.csproj") -c Debug
 & $godot --headless --path $root --script "res://tools/build_pck.gd"
@@ -19,12 +19,13 @@ Get-ChildItem -Path $buildRoot -Filter "sts2-RMP-*.zip" -File -ErrorAction Silen
 
 Copy-Item $dllSource -Destination (Join-Path $releaseDir "RemoveMultiplayerPlayerLimit.dll") -Force
 Copy-Item $pckSource -Destination (Join-Path $releaseDir "RemoveMultiplayerPlayerLimit.pck") -Force
+Copy-Item $manifestPathBeta -Destination (Join-Path $releaseDir "RemoveMultiplayerPlayerLimit.json") -Force
 
-$manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+$manifest = Get-Content $manifestPathBeta -Raw | ConvertFrom-Json
 $version = [string]$manifest.version
 $modFolderName = if ([string]::IsNullOrWhiteSpace([string]$manifest.pck_name)) { [string]$manifest.name } else { [string]$manifest.pck_name }
-if ([string]::IsNullOrWhiteSpace($version)) { throw "mod_manifest.json missing version field" }
-if ([string]::IsNullOrWhiteSpace($modFolderName)) { throw "mod_manifest.json missing name/pck_name field" }
+if ([string]::IsNullOrWhiteSpace($version)) { throw "RemoveMultiplayerPlayerLimit.json missing version field" }
+if ([string]::IsNullOrWhiteSpace($modFolderName)) { throw "RemoveMultiplayerPlayerLimit.json missing name/pck_name field" }
 
 $zipName = "sts2-RMP-$version.zip"
 $zipPath = Join-Path $buildRoot $zipName

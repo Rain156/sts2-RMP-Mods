@@ -6,13 +6,13 @@
 
 ![Version](https://img.shields.io/badge/Version-0.0.4A-blue.svg)
 ![Game](https://img.shields.io/badge/Slay_The_Spire_2-Mod-red.svg)
-![Platform](https://img.shields.io/badge/Platform-Windows%20|%20macOS-lightgrey.svg)
+![Platform](https://img.shields.io/badge/Platform-Windows%20|%20macOS%20|%20Linux-lightgrey.svg)
 
 *A Slay the Spire 2 mod that increases the vanilla 4-player multiplayer lobby limit. Gather more friends and climb the Spire together!*
 
 </div>
 
-This mod elegantly increases the multiplayer lobby limit. By default, it perfectly supports **8 players** and can be configured to support up to **16 players**.
+This mod elegantly increases the multiplayer lobby limit. By default, it perfectly supports **8 players** and can be configured up to **16 players** from the in-game settings screen.
 
 <br>
 
@@ -34,7 +34,7 @@ This mod elegantly increases the multiplayer lobby limit. By default, it perfect
 * 🏕️ **Expanded Campfire Seating:** When there are more than 4 players, character models will not overlap. Campfires automatically generate front and back rows, complete with additional background logs for everyone to sit on.
 * 💰 **Organized Shop Layout:** When visiting the merchant with a large group, player models are automatically arranged into neat grids (rows and columns) to prevent crowding and overlapping.
 * 🎁 **Smart Treasure Room:** The relic selection screen automatically scales, intelligently splitting **relic slots** into two perfectly centered rows when needed.
-* 📝 **Customizable Limit:** Easily adjust your preferred maximum player count (4-16) via an auto-generated `config.json` file.
+* 📝 **Customizable Limit:** Adjust the maximum player count (4–16) directly from the in-game settings screen, under the General tab below the Modding section. The macOS TLS workaround can be toggled via `config.ini`.
 
 ## 🎮 Installation
 
@@ -48,7 +48,7 @@ This mod elegantly increases the multiplayer lobby limit. By default, it perfect
 
 macOS requires placing the mod inside the `.app` bundle and running the game under Rosetta 2.
 
-> **Note:** Some macOS players hit `unknown ca` / `BadCert` errors when joining multiplayer. This mod now enables a macOS-only TLS workaround during multiplayer handshakes. If you need the original behavior, set `macos_tls_workaround` to `false` in `config.json`.
+> **Note:** Some macOS players hit `unknown ca` / `BadCert` errors when joining multiplayer. This mod now enables a macOS-only TLS workaround during multiplayer handshakes. If you need the original behavior, edit `config.ini` to disable the workaround.
 
 1. Download the latest `sts2-RMP-[version].zip` from the **Releases** page.
 2. Extract the archive and copy the inner `RemoveMultiplayerPlayerLimit` folder to:
@@ -71,15 +71,55 @@ macOS requires placing the mod inside the `.app` bundle and running the game und
 
 5. The mod will be enabled automatically on launch.
 
+### Linux (Ubuntu)
+
+Linux uses the same mod folder layout as Windows, but the game executable and Godot binary names vary by distro/package.
+
+1. Download the latest `sts2-RMP-[version].zip` from the **Releases** page.
+2. Extract the archive and copy the inner `RemoveMultiplayerPlayerLimit` folder to:
+   ```
+   <Slay the Spire 2>/mods/
+   ```
+3. Start the game normally from Steam or your local executable.
+4. The mod will be enabled automatically on launch.
+
+> **Compatibility note:** All players must use the same mod version. Local settings may differ safely; only the host's configured limit determines how many players can actually join the lobby.
+
+> **Linux troubleshooting:** If the mod fails during startup with a Harmony / `mm-exhelper.so` error mentioning `_Unwind_RaiseException`, make sure your system runtime libraries are available to the game process. Installing `libgcc-s1`, `libstdc++6`, and `libunwind8` is usually sufficient.
+
 ## ⚙️ Configuration
 
-After launching the game with the mod enabled for the first time, a `config.json` file will be generated in the mod's folder (`mods/RemoveMultiplayerPlayerLimit/config.json`).
+Open the in-game settings screen. In the **General** tab, scroll down past the **Modding** row — the **Max Players** paginator lets you adjust the lobby player limit (4–16) in real time.
 
-```json
-{
-  "max_player_limit": 8,
-  "macos_tls_workaround": true,
-  "min_supported": 4,
-  "max_supported": 16
-}
+The macOS TLS compatibility workaround can only be changed by editing `config.ini` manually.
+
+Values are saved to `mods/RemoveMultiplayerPlayerLimit/config.ini`.
+
+Example:
+
+```ini
+[macos]
+tls_workaround=true
+
+[multiplayer]
+max_player_limit=8
 ```
+
+> **Important for upgrading from older releases:** If you already have `mods/RemoveMultiplayerPlayerLimit/config.json` from an older version, delete that file once before launching the new build. StS2 scans JSON files in the mod folder as manifests, but `config.ini` is safe.
+
+## Contributors
+
+Special thanks to the following contributors:
+
+<div align="center">
+   <a href="https://github.com/Guchen1">
+      <img src="https://github.com/Guchen1.png?size=96" alt="Guchen1" width="96" height="96" />
+   </a>
+   <a href="https://github.com/Lemon2ee">
+      <img src="https://github.com/Lemon2ee.png?size=96" alt="Lemon2ee" width="96" height="96" />
+   </a>
+   <a href="https://github.com/DawningW">
+      <img src="https://github.com/DawningW.png?size=96" alt="DawningW" width="96" height="96" />
+   </a>
+</div>
+

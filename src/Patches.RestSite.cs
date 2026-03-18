@@ -1,12 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using Godot;
 using HarmonyLib;
+using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.RestSite;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
+using MegaCrit.Sts2.Core.Nodes.RestSite;
+using MegaCrit.Sts2.Core.Runs;
 
 namespace RemoveMultiplayerPlayerLimit;
 
@@ -178,6 +182,36 @@ public static partial class ModEntry
 			return true;
 		}
 	}
+
+	private static bool TryGetCharacter(NRestSiteRoom room, ulong playerId, out NRestSiteCharacter character)
+	{
+		NRestSiteCharacter? nRestSiteCharacter = room.Characters.FirstOrDefault((NRestSiteCharacter c) => c.Player.NetId == playerId);
+		if (nRestSiteCharacter == null)
+		{
+			character = null!;
+			return false;
+		}
+		character = nRestSiteCharacter;
+		return true;
+	}
+
+	private static RestSiteOption? TryGetHoveredOption(ulong playerId)
+	{
+		int? hoveredOptionIndex = RunManager.Instance.RestSiteSynchronizer.GetHoveredOptionIndex(playerId);
+		if (!hoveredOptionIndex.HasValue)
+		{
+			return null;
+		}
+		IReadOnlyList<RestSiteOption> optionsForPlayer = RunManager.Instance.RestSiteSynchronizer.GetOptionsForPlayer(playerId);
+		int value = hoveredOptionIndex.Value;
+		if ((uint)value >= (uint)optionsForPlayer.Count)
+		{
+			return null;
+		}
+		return optionsForPlayer[value];
+	}
+
+	private static bool IsRemote(NRestSiteCharacter character) => !LocalContext.IsMe(character.Player);
 
 	[HarmonyPatch(typeof(NRestSiteRoom), "OnPlayerChangedHoveredRestSiteOption")]
 	private static class NRestSiteRoomHoverPatch

@@ -40,7 +40,7 @@ public static partial class ModEntry
 
 	private static readonly Dictionary<NTreasureRoomRelicCollection, NChoiceSelectionSkipButton> TreasureSkipButtons = new Dictionary<NTreasureRoomRelicCollection, NChoiceSelectionSkipButton>();
 
-	private static readonly Dictionary<string, Dictionary<string, string>> TreasureLocalizationCache = new Dictionary<string, Dictionary<string, string>>();
+	private static readonly Dictionary<string, Dictionary<string, string>> LocalizationCache = new Dictionary<string, Dictionary<string, string>>();
 
 	private static readonly FieldInfo? HoldersInUseField = AccessTools.Field(typeof(NTreasureRoomRelicCollection), "_holdersInUse");
 
@@ -61,6 +61,8 @@ public static partial class ModEntry
 	private static readonly FieldInfo? SyncVotesField = AccessTools.Field(typeof(TreasureRoomRelicSynchronizer), "_votes");
 
 	private static readonly FieldInfo? SyncPredictedVoteField = AccessTools.Field(typeof(TreasureRoomRelicSynchronizer), "_predictedVote");
+
+	private static readonly PropertyInfo? RunManagerStateProperty = AccessTools.Property(typeof(RunManager), "State");
 
 	private static readonly FieldInfo? VotesChangedEventField = AccessTools.Field(typeof(TreasureRoomRelicSynchronizer), "VotesChanged");
 
@@ -97,10 +99,25 @@ public static partial class ModEntry
 				return;
 			}
 			NTreasureRoomRelicHolder template = multiplayerHolders[multiplayerHolders.Count - 1];
+			string scenePath = template.SceneFilePath;
+			PackedScene? scene = null;
+			if (!string.IsNullOrEmpty(scenePath))
+			{
+				scene = PreloadManager.Cache.GetScene(scenePath);
+			}
 			Node parent = template.GetParent();
 			for (int i = multiplayerHolders.Count; i < currentRelics.Count; i++)
 			{
-				if (template.Duplicate() is not NTreasureRoomRelicHolder newHolder)
+				NTreasureRoomRelicHolder? newHolder = null;
+				if (scene != null)
+				{
+					newHolder = scene.Instantiate<NTreasureRoomRelicHolder>();
+				}
+				else if (template.Duplicate() is NTreasureRoomRelicHolder duplicated)
+				{
+					newHolder = duplicated;
+				}
+				if (newHolder == null)
 				{
 					continue;
 				}
@@ -190,27 +207,7 @@ public static partial class ModEntry
 	{
 		private static void Postfix(NTreasureRoomRelicCollection __instance)
 		{
-			if (TreasureSkipButtons.ContainsKey(__instance))
-			{
-				return;
-			}
-			string scenePath = SceneHelper.GetScenePath("ui/choice_selection_skip_button");
-			PackedScene? scene = PreloadManager.Cache.GetScene(scenePath);
-			if (scene == null)
-			{
-				Log.Warn($"Failed to load skip button scene: {scenePath}");
-				return;
-			}
-			NChoiceSelectionSkipButton skipButton = scene.Instantiate<NChoiceSelectionSkipButton>(PackedScene.GenEditState.Disabled);
-			skipButton.Name = "TreasureSkipButton";
-			skipButton.Position = new Vector2(0f, 420f);
-			MegaLabel? label = skipButton.GetNodeOrNull<MegaLabel>("Label");
-			label?.SetTextAutoSize(GetTreasureLocalizedText("TREASURE_RELIC_SKIP_BUTTON", "Skip"));
-			skipButton.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(OnTreasureSkipReleased));
-			__instance.AddChild(skipButton);
-			__instance.Connect(Control.SignalName.Resized, Callable.From(() => UpdateSkipButtonLayout(__instance)));
-			TreasureSkipButtons[__instance] = skipButton;
-			UpdateSkipButtonLayout(__instance);
+			EnsureTreasureSkipButton(__instance, out _);
 		}
 	}
 
@@ -220,21 +217,14 @@ public static partial class ModEntry
 	{
 		private static void Postfix(NTreasureRoomRelicCollection __instance)
 		{
-			if (!TreasureSkipButtons.TryGetValue(__instance, out NChoiceSelectionSkipButton? button))
+			if (!EnsureTreasureSkipButton(__instance, out NChoiceSelectionSkipButton? button) || button == null)
 			{
 				return;
 			}
-			bool hasRelics = RunManager.Instance.TreasureRoomRelicSynchronizer.CurrentRelics?.Count > 0;
-			button.Visible = hasRelics;
-			if (hasRelics)
-			{
-				TreasureRoomRelicSynchronizer synchronizer = RunManager.Instance.TreasureRoomRelicSynchronizer;
-				bool isPending = TreasureLocalVotePendingStates.Contains(synchronizer);
-				bool isSkipLocked = TreasureLocalSkipLockedStates.Contains(synchronizer);
-				SetSkipButtonState(button, isEnabled: !isPending && !isSkipLocked);
-				UpdateSkipButtonLayout(__instance);
-				button.AnimateIn();
-			}
+			button.Visible = true;
+			SetSkipButtonState(button, isEnabled: !IsSkipButtonInteractionBlocked());
+			UpdateSkipButtonLayout(__instance);
+			button.AnimateIn();
 		}
 	}
 
@@ -244,15 +234,11 @@ public static partial class ModEntry
 	{
 		private static void Postfix(NTreasureRoomRelicCollection __instance, bool isEnabled)
 		{
-			if (!TreasureSkipButtons.TryGetValue(__instance, out NChoiceSelectionSkipButton? button))
+			if (!EnsureTreasureSkipButton(__instance, out NChoiceSelectionSkipButton? button) || button == null)
 			{
 				return;
 			}
-			bool hasRelics = RunManager.Instance.TreasureRoomRelicSynchronizer.CurrentRelics?.Count > 0;
-			TreasureRoomRelicSynchronizer synchronizer = RunManager.Instance.TreasureRoomRelicSynchronizer;
-			bool isPending = TreasureLocalVotePendingStates.Contains(synchronizer);
-			bool isSkipLocked = TreasureLocalSkipLockedStates.Contains(synchronizer);
-			SetSkipButtonState(button, isEnabled && hasRelics && !isPending && !isSkipLocked);
+			SetSkipButtonState(button, isEnabled && !IsSkipButtonInteractionBlocked());
 		}
 	}
 
@@ -309,9 +295,7 @@ public static partial class ModEntry
 	{
 		private static void Postfix(TreasureRoomRelicSynchronizer __instance)
 		{
-			TreasureLocalVotePendingStates.Remove(__instance);
-			TreasureLocalSkipLockedStates.Remove(__instance);
-			SetSyncPredictedVote(__instance, null);
+			ClearLocalVoteState(__instance);
 		}
 	}
 
@@ -320,9 +304,7 @@ public static partial class ModEntry
 	{
 		private static void Prefix(TreasureRoomRelicSynchronizer __instance)
 		{
-			TreasureLocalVotePendingStates.Remove(__instance);
-			TreasureLocalSkipLockedStates.Remove(__instance);
-			SetSyncPredictedVote(__instance, null);
+			ClearLocalVoteState(__instance);
 		}
 	}
 
@@ -338,11 +320,16 @@ public static partial class ModEntry
 			List<RelicModel>? syncCurrentRelics = GetSyncCurrentRelics(__instance);
 			IPlayerCollection? syncPlayerCollection = GetSyncPlayerCollection(__instance);
 			List<int?>? syncVotes = GetSyncVotes(__instance);
+			bool hasSkipInvolved = (syncVotes != null && syncVotes.Any((int? vote) => vote == -1)) || index == -1;
+			if (!hasSkipInvolved)
+			{
+				return true;
+			}
 			if (syncCurrentRelics == null || syncPlayerCollection == null || syncVotes == null)
 			{
-				return false;
+				return true;
 			}
-			if (index < -1 || index >= syncCurrentRelics.Count)
+			if (index != -1 && (index < 0 || index >= syncCurrentRelics.Count))
 			{
 				return false;
 			}
@@ -372,85 +359,7 @@ public static partial class ModEntry
 			bool allVoted = syncVotes.Count >= expectedCount && syncVotes.Take(expectedCount).All((int? vote) => vote.HasValue);
 			if (allVoted)
 			{
-				if (syncVotes.Take(expectedCount).All((int? vote) => vote == -1))
-				{
-					__instance.CompleteWithNoRelics();
-					return false;
-				}
-				Dictionary<int, List<Player>> playersByRelicIndex = new Dictionary<int, List<Player>>();
-				for (int i = 0; i < syncCurrentRelics.Count; i++)
-				{
-					playersByRelicIndex[i] = new List<Player>();
-				}
-				for (int i = 0; i < expectedCount; i++)
-				{
-					if (!syncVotes[i].HasValue || syncVotes[i] == -1)
-					{
-						continue;
-					}
-					int value = syncVotes[i]!.Value;
-					if (value < 0 || value >= syncCurrentRelics.Count)
-					{
-						Log.Warn($"Invalid vote index {value} from player slot {i}, ignoring.");
-						continue;
-					}
-					playersByRelicIndex[value].Add(syncPlayerCollection.Players[i]);
-				}
-				List<RelicPickingResult> results = new List<RelicPickingResult>();
-				List<RelicModel> unclaimedRelics = new List<RelicModel>();
-				RelicPickingFightMove[] values = Enum.GetValues<RelicPickingFightMove>();
-				Rng? syncRng = GetSyncRng(__instance);
-				for (int i = 0; i < syncCurrentRelics.Count; i++)
-				{
-					List<Player> playersVotedForRelic = playersByRelicIndex[i];
-					if (playersVotedForRelic.Count == 0)
-					{
-						unclaimedRelics.Add(syncCurrentRelics[i]);
-					}
-					else if (playersVotedForRelic.Count == 1)
-					{
-						results.Add(new RelicPickingResult
-						{
-							type = RelicPickingResultType.OnlyOnePlayerVoted,
-							player = playersVotedForRelic[0],
-							relic = syncCurrentRelics[i]
-						});
-					}
-					else if (playersVotedForRelic.Count > 1)
-					{
-						results.Add(RelicPickingResult.GenerateRelicFight(playersVotedForRelic, syncCurrentRelics[i], () => syncRng != null ? syncRng.NextItem(values) : values[0]));
-					}
-				}
-				HashSet<int> skipVoterSlots = new HashSet<int>();
-				for (int i = 0; i < expectedCount; i++)
-				{
-					if (syncVotes[i] == -1)
-					{
-						skipVoterSlots.Add(i);
-					}
-				}
-				List<Player> playersWithoutRelic = syncPlayerCollection.Players.Where((Player p, int slotIndex) => !skipVoterSlots.Contains(slotIndex) && results.All((RelicPickingResult r) => r.player != p)).ToList();
-				if (syncRng != null)
-				{
-					unclaimedRelics.StableShuffle(syncRng);
-				}
-				for (int i = 0; i < Math.Min(unclaimedRelics.Count, playersWithoutRelic.Count); i++)
-				{
-					results.Add(new RelicPickingResult
-					{
-						type = RelicPickingResultType.ConsolationPrize,
-						player = playersWithoutRelic[i],
-						relic = unclaimedRelics[i]
-					});
-				}
-				if (results.Count > 0)
-				{
-					InvokeRelicsAwarded(__instance, results);
-				}
-				TreasureLocalVotePendingStates.Remove(__instance);
-				TreasureLocalSkipLockedStates.Remove(__instance);
-				SetSyncPredictedVote(__instance, null);
-				InvokeEndRelicVoting(__instance);
+				ResolveAllVotes(__instance, syncCurrentRelics, syncPlayerCollection, syncVotes, expectedCount);
 			}
 			return false;
 		}
@@ -520,6 +429,109 @@ public static partial class ModEntry
 		}
 	}
 
+	private static void ClearLocalVoteState(TreasureRoomRelicSynchronizer synchronizer)
+	{
+		TreasureLocalVotePendingStates.Remove(synchronizer);
+		TreasureLocalSkipLockedStates.Remove(synchronizer);
+		SetSyncPredictedVote(synchronizer, null);
+	}
+
+	private static bool IsSkipButtonInteractionBlocked()
+	{
+		TreasureRoomRelicSynchronizer synchronizer = RunManager.Instance.TreasureRoomRelicSynchronizer;
+		return synchronizer.CurrentRelics == null
+			|| TreasureLocalVotePendingStates.Contains(synchronizer)
+			|| TreasureLocalSkipLockedStates.Contains(synchronizer);
+	}
+
+	private static void ResolveAllVotes(
+		TreasureRoomRelicSynchronizer synchronizer,
+		List<RelicModel> relics,
+		IPlayerCollection players,
+		List<int?> votes,
+		int expectedCount)
+	{
+		if (votes.Take(expectedCount).All((int? vote) => vote == -1))
+		{
+			synchronizer.CompleteWithNoRelics();
+			return;
+		}
+		Dictionary<int, List<Player>> playersByRelicIndex = new Dictionary<int, List<Player>>();
+		for (int i = 0; i < relics.Count; i++)
+		{
+			playersByRelicIndex[i] = new List<Player>();
+		}
+		for (int i = 0; i < expectedCount; i++)
+		{
+			if (!votes[i].HasValue || votes[i] == -1)
+			{
+				continue;
+			}
+			int value = votes[i]!.Value;
+			if (value < 0 || value >= relics.Count)
+			{
+				Log.Warn($"Invalid vote index {value} from player slot {i}, ignoring.");
+				continue;
+			}
+			playersByRelicIndex[value].Add(players.Players[i]);
+		}
+		List<RelicPickingResult> results = new List<RelicPickingResult>();
+		List<RelicModel> unclaimedRelics = new List<RelicModel>();
+		RelicPickingFightMove[] fightMoves = Enum.GetValues<RelicPickingFightMove>();
+		Rng? rng = GetSyncRng(synchronizer);
+		for (int i = 0; i < relics.Count; i++)
+		{
+			List<Player> voters = playersByRelicIndex[i];
+			if (voters.Count == 0)
+			{
+				unclaimedRelics.Add(relics[i]);
+			}
+			else if (voters.Count == 1)
+			{
+				results.Add(new RelicPickingResult
+				{
+					type = RelicPickingResultType.OnlyOnePlayerVoted,
+					player = voters[0],
+					relic = relics[i]
+				});
+			}
+			else
+			{
+				results.Add(RelicPickingResult.GenerateRelicFight(voters, relics[i], () => rng != null ? rng.NextItem(fightMoves) : fightMoves[0]));
+			}
+		}
+		HashSet<int> skipVoterSlots = new HashSet<int>();
+		for (int i = 0; i < expectedCount; i++)
+		{
+			if (votes[i] == -1)
+			{
+				skipVoterSlots.Add(i);
+			}
+		}
+		List<Player> playersWithoutRelic = players.Players
+			.Where((Player p, int slotIndex) => !skipVoterSlots.Contains(slotIndex) && results.All((RelicPickingResult r) => r.player != p))
+			.ToList();
+		if (rng != null)
+		{
+			unclaimedRelics.StableShuffle(rng);
+		}
+		for (int i = 0; i < Math.Min(unclaimedRelics.Count, playersWithoutRelic.Count); i++)
+		{
+			results.Add(new RelicPickingResult
+			{
+				type = RelicPickingResultType.ConsolationPrize,
+				player = playersWithoutRelic[i],
+				relic = unclaimedRelics[i]
+			});
+		}
+		if (results.Count > 0)
+		{
+			InvokeRelicsAwarded(synchronizer, results);
+		}
+		ClearLocalVoteState(synchronizer);
+		InvokeEndRelicVoting(synchronizer);
+	}
+
 	private static void InvokeVotesChanged(TreasureRoomRelicSynchronizer synchronizer)
 	{
 		if (VotesChangedEventField?.GetValue(synchronizer) is Action action)
@@ -550,6 +562,32 @@ public static partial class ModEntry
 		}
 	}
 
+	private static bool EnsureTreasureSkipButton(NTreasureRoomRelicCollection collection, out NChoiceSelectionSkipButton? button)
+	{
+		if (TreasureSkipButtons.TryGetValue(collection, out button) && button != null)
+		{
+			return true;
+		}
+		string scenePath = SceneHelper.GetScenePath("ui/choice_selection_skip_button");
+		PackedScene? scene = PreloadManager.Cache.GetScene(scenePath);
+		if (scene == null)
+		{
+			Log.Warn($"Failed to load skip button scene: {scenePath}");
+			button = null;
+			return false;
+		}
+		button = scene.Instantiate<NChoiceSelectionSkipButton>(PackedScene.GenEditState.Disabled);
+		button.Name = "TreasureSkipButton";
+		button.Position = new Vector2(0f, 420f);
+		MegaLabel? label = button.GetNodeOrNull<MegaLabel>("Label");
+		label?.SetTextAutoSize(GetLocalizedText("TREASURE_RELIC_SKIP_BUTTON", "Skip"));
+		button.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(OnTreasureSkipReleased));
+		collection.AddChild(button);
+		collection.Connect(Control.SignalName.Resized, Callable.From(() => UpdateSkipButtonLayout(collection)));
+		TreasureSkipButtons[collection] = button;
+		return true;
+	}
+
 	private static void UpdateSkipButtonLayout(NTreasureRoomRelicCollection collection)
 	{
 		if (!TreasureSkipButtons.TryGetValue(collection, out NChoiceSelectionSkipButton? button))
@@ -569,21 +607,21 @@ public static partial class ModEntry
 
 	// ── 本地化 ────────────────────────────────────────────────────────────
 
-	private static string GetTreasureLocalizedText(string key, string fallbackText)
+	private static string GetLocalizedText(string key, string fallbackText)
 	{
-		string languageCode = GetTreasureLanguageCode();
-		if (TryGetTreasureLocValue(languageCode, key, out string value))
+		string languageCode = GetLanguageCode();
+		if (TryGetLocValue(languageCode, key, out string value))
 		{
 			return value;
 		}
-		if (languageCode != "en_us" && TryGetTreasureLocValue("en_us", key, out value))
+		if (languageCode != "en_us" && TryGetLocValue("en_us", key, out value))
 		{
 			return value;
 		}
 		return fallbackText;
 	}
 
-	private static string GetTreasureLanguageCode()
+	private static string GetLanguageCode()
 	{
 		string language = LocManager.Instance?.Language ?? "eng";
 		if (string.Equals(language, "zhs", StringComparison.OrdinalIgnoreCase))
@@ -593,9 +631,9 @@ public static partial class ModEntry
 		return "en_us";
 	}
 
-	private static bool TryGetTreasureLocValue(string languageCode, string key, out string value)
+	private static bool TryGetLocValue(string languageCode, string key, out string value)
 	{
-		Dictionary<string, string> table = GetTreasureLocalizationTable(languageCode);
+		Dictionary<string, string> table = GetLocalizationTable(languageCode);
 		if (table.TryGetValue(key, out string? result) && result != null)
 		{
 			value = result;
@@ -605,9 +643,9 @@ public static partial class ModEntry
 		return false;
 	}
 
-	private static Dictionary<string, string> GetTreasureLocalizationTable(string languageCode)
+	private static Dictionary<string, string> GetLocalizationTable(string languageCode)
 	{
-		if (TreasureLocalizationCache.TryGetValue(languageCode, out Dictionary<string, string>? cached))
+		if (LocalizationCache.TryGetValue(languageCode, out Dictionary<string, string>? cached))
 		{
 			return cached;
 		}
@@ -627,9 +665,9 @@ public static partial class ModEntry
 		}
 		catch (Exception ex)
 		{
-			Log.Warn($"Failed to load treasure localization file: {filePath}. {ex.Message}");
+			Log.Warn($"Failed to load localization file: {filePath}. {ex.Message}");
 		}
-		TreasureLocalizationCache[languageCode] = table;
+		LocalizationCache[languageCode] = table;
 		return table;
 	}
 
@@ -641,5 +679,40 @@ public static partial class ModEntry
 			return;
 		}
 		EndRelicVotingMethod.Invoke(synchronizer, null);
+	}
+
+	private static void SetSyncCurrentRelics(TreasureRoomRelicSynchronizer synchronizer, List<RelicModel>? relics)
+	{
+		SyncCurrentRelicsField?.SetValue(synchronizer, relics);
+	}
+
+	[HarmonyPatch(typeof(TreasureRoomRelicSynchronizer), nameof(TreasureRoomRelicSynchronizer.BeginRelicPicking))]
+	private static class TreasureRoomRelicSynchronizerBeginStrawberryPatch
+	{
+		private static void Postfix(TreasureRoomRelicSynchronizer __instance)
+		{
+			List<RelicModel>? currentRelics = GetSyncCurrentRelics(__instance);
+			if (currentRelics != null)
+			{
+				// 1. 修复空池导致的卡死问题（多人耗尽遗物池时兜底为 草莓）
+				bool hasChanges = false;
+				for (int i = 0; i < currentRelics.Count; i++)
+				{
+					if (currentRelics[i] == null)
+					{
+						RelicModel? strawberry = ModelDb.Relic<Strawberry>();
+						if (strawberry != null)
+						{
+							currentRelics[i] = strawberry;
+							hasChanges = true;
+						}
+					}
+				}
+				if (hasChanges)
+				{
+					InvokeVotesChanged(__instance);
+				}
+			}
+		}
 	}
 }

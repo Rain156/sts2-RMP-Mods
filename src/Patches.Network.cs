@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
+using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Multiplayer;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
@@ -37,13 +38,13 @@ public static partial class ModEntry
 	[HarmonyPatch(typeof(NetHostGameService), nameof(NetHostGameService.StartENetHost))]
 	private static class StartENetHostPatch
 	{
-		private static void Prefix(ref int maxClients) => maxClients = EnsureMin(maxClients, TargetPlayerLimit);
+		private static void Prefix(ref int maxClients) => maxClients = Math.Max(maxClients, TargetPlayerLimit);
 	}
 
 	[HarmonyPatch(typeof(NetHostGameService), nameof(NetHostGameService.StartSteamHost))]
 	private static class StartSteamHostPatch
 	{
-		private static void Prefix(ref int maxClients) => maxClients = EnsureMin(maxClients, TargetPlayerLimit);
+		private static void Prefix(ref int maxClients) => maxClients = Math.Max(maxClients, TargetPlayerLimit);
 	}
 
 	[HarmonyPatch(typeof(StartRunLobby), MethodType.Constructor, typeof(GameMode), typeof(INetGameService), typeof(IStartRunLobbyListener), typeof(int))]
@@ -55,6 +56,64 @@ public static partial class ModEntry
 			{
 				MaxPlayersField.SetValue(__instance, TargetPlayerLimit);
 			}
+		}
+	}
+
+	// ── 动态同步 MaxPlayers：当玩家尝试加入时，确保 MaxPlayers 与当前设置一致 ──
+
+	[HarmonyPatch(typeof(StartRunLobby), "OnConnectedToClientAsHost")]
+	private static class OnConnectedToClientAsHostPatch
+	{
+		private static void Prefix(StartRunLobby __instance) => SyncLobbyMaxPlayers(__instance);
+	}
+
+	[HarmonyPatch(typeof(StartRunLobby), "HandleClientLobbyJoinRequestMessage")]
+	private static class HandleClientLobbyJoinRequestMessagePatch
+	{
+		private static void Prefix(StartRunLobby __instance) => SyncLobbyMaxPlayers(__instance);
+	}
+
+	private static void SyncLobbyMaxPlayers(StartRunLobby lobby)
+	{
+		if (MaxPlayersField == null || lobby.NetService.Type != NetGameType.Host)
+		{
+			return;
+		}
+		if (lobby.MaxPlayers != TargetPlayerLimit)
+		{
+			MaxPlayersField.SetValue(lobby, TargetPlayerLimit);
+			TryUpdateSteamLobbyMemberLimit(lobby.NetService);
+		}
+	}
+
+	private static void TryUpdateSteamLobbyMemberLimit(INetGameService netService)
+	{
+		try
+		{
+			if (netService is not NetHostGameService hostService)
+			{
+				return;
+			}
+			object? netHost = hostService.NetHost;
+			if (netHost == null)
+			{
+				return;
+			}
+			// SteamHost.LobbyId → CSteamID? (Steamworks.NET 类型，通过反射避免直接依赖)
+			PropertyInfo? lobbyIdProp = AccessTools.Property(netHost.GetType(), "LobbyId");
+			object? lobbyIdObj = lobbyIdProp?.GetValue(netHost);
+			if (lobbyIdObj == null)
+			{
+				return;
+			}
+			// SteamMatchmaking.SetLobbyMemberLimit(CSteamID lobbyId, int maxMembers)
+			Type? steamMatchmakingType = lobbyIdObj.GetType().Assembly.GetType("Steamworks.SteamMatchmaking");
+			MethodInfo? setLimitMethod = steamMatchmakingType?.GetMethod("SetLobbyMemberLimit");
+			setLimitMethod?.Invoke(null, new object[] { lobbyIdObj, TargetPlayerLimit });
+		}
+		catch (Exception ex)
+		{
+			Log.Warn($"Failed to update Steam lobby member limit: {ex.Message}");
 		}
 	}
 
