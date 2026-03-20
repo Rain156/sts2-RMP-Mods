@@ -7,3 +7,8 @@
 # IDE
 .idea/
 .vscode/
+*.sln
+*.csproj.user
+
+.DS_Store
+Thumbs.db
