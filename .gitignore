@@ -3,6 +3,7 @@
 /android/
 .tools/
 .build/
+build/
 
 # IDE
 .idea/
