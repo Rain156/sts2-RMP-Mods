@@ -11,6 +11,7 @@ using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Nodes.RestSite;
 using MegaCrit.Sts2.Core.Runs;
+using RemoveMultiplayerPlayerLimit.Network;
 
 namespace RemoveMultiplayerPlayerLimit;
 
@@ -108,9 +109,9 @@ public static partial class ModEntry
 			{
 				return containers[containers.Count - 1].Position;
 			}
-			if (index >= TargetPlayerLimit)
+			if (index >= ProtocolConfig.TargetPlayerLimit)
 			{
-				Log.Warn($"Rest site character index {index} exceeds configured target limit {TargetPlayerLimit}.");
+				Log.Warn($"Rest site character index {index} exceeds configured target limit {ProtocolConfig.TargetPlayerLimit}.");
 			}
 			if (index < 4)
 			{

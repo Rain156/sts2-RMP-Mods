@@ -25,6 +25,7 @@ using MegaCrit.Sts2.Core.Nodes.Screens.CardSelection;
 using MegaCrit.Sts2.Core.Nodes.Screens.TreasureRoomRelic;
 using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.Runs;
+using RemoveMultiplayerPlayerLimit.Network;
 
 namespace RemoveMultiplayerPlayerLimit;
 
@@ -36,7 +37,8 @@ public static partial class ModEntry
 
 	private const float MinRelicHolderYStep = 120f;
 
-	private const int NetworkSkipVoteAsByte = 255;
+	// ── 内部常量：跳过投票的逻辑标识（仅用于模组内部，不再经过网络传输） ──
+	private const int SkipVoteIndex = -1;
 
 	private static readonly Dictionary<NTreasureRoomRelicCollection, NChoiceSelectionSkipButton> TreasureSkipButtons = new Dictionary<NTreasureRoomRelicCollection, NChoiceSelectionSkipButton>();
 
@@ -253,7 +255,7 @@ public static partial class ModEntry
 	}
 
 	/// <summary>
-	/// 拦截 PickRelicLocally 仅处理跳过（index == -1）。
+	/// 拦截 PickRelicLocally 仅处理跳过（index == SkipVoteIndex）。
 	/// 正常遗物选择（index >= 0）放行给原版处理。
 	/// </summary>
 	[HarmonyPatch(typeof(TreasureRoomRelicSynchronizer), "PickRelicLocally")]
@@ -261,7 +263,7 @@ public static partial class ModEntry
 	{
 		private static bool Prefix(TreasureRoomRelicSynchronizer __instance, int index)
 		{
-			if (index != -1)
+			if (index != SkipVoteIndex)
 			{
 				return !TreasureLocalSkipLockedStates.Contains(__instance);
 			}
@@ -283,8 +285,9 @@ public static partial class ModEntry
 			}
 			TreasureLocalVotePendingStates.Add(__instance);
 			TreasureLocalSkipLockedStates.Add(__instance);
-			SetSyncPredictedVote(__instance, -1);
-			actionQueue.RequestEnqueue(new PickRelicAction(player, -1));
+			SetSyncPredictedVote(__instance, SkipVoteIndex);
+			// 通过模组协议通道的独立动作类型发送跳过投票，不侵入官方 NetPickRelicAction 协议空间
+			actionQueue.RequestEnqueue(new RmpSkipRelicGameAction(player));
 			InvokeVotesChanged(__instance);
 			return false;
 		}
@@ -313,14 +316,11 @@ public static partial class ModEntry
 	{
 		private static bool Prefix(TreasureRoomRelicSynchronizer __instance, Player player, int index)
 		{
-			if (index == NetworkSkipVoteAsByte)
-			{
-				index = -1;
-			}
+			// 模组协议通道: RmpSkipRelicGameAction 直接传入 index=-1，无需 255→-1 转换
 			List<RelicModel>? syncCurrentRelics = GetSyncCurrentRelics(__instance);
 			IPlayerCollection? syncPlayerCollection = GetSyncPlayerCollection(__instance);
 			List<int?>? syncVotes = GetSyncVotes(__instance);
-			bool hasSkipInvolved = (syncVotes != null && syncVotes.Any((int? vote) => vote == -1)) || index == -1;
+			bool hasSkipInvolved = (syncVotes != null && syncVotes.Any((int? vote) => vote == SkipVoteIndex)) || index == SkipVoteIndex;
 			if (!hasSkipInvolved)
 			{
 				return true;
@@ -329,7 +329,7 @@ public static partial class ModEntry
 			{
 				return true;
 			}
-			if (index != -1 && (index < 0 || index >= syncCurrentRelics.Count))
+			if (index != SkipVoteIndex && (index < 0 || index >= syncCurrentRelics.Count))
 			{
 				return false;
 			}
@@ -379,7 +379,7 @@ public static partial class ModEntry
 			return;
 		}
 		collection.SetSelectionEnabled(isEnabled: false);
-		synchronizer.PickRelicLocally(-1);
+		synchronizer.PickRelicLocally(SkipVoteIndex);
 	}
 
 	// ── 辅助方法 ──────────────────────────────────────────────────────────
@@ -451,7 +451,7 @@ public static partial class ModEntry
 		List<int?> votes,
 		int expectedCount)
 	{
-		if (votes.Take(expectedCount).All((int? vote) => vote == -1))
+		if (votes.Take(expectedCount).All((int? vote) => vote == SkipVoteIndex))
 		{
 			synchronizer.CompleteWithNoRelics();
 			return;
@@ -463,7 +463,7 @@ public static partial class ModEntry
 		}
 		for (int i = 0; i < expectedCount; i++)
 		{
-			if (!votes[i].HasValue || votes[i] == -1)
+			if (!votes[i].HasValue || votes[i] == SkipVoteIndex)
 			{
 				continue;
 			}
@@ -503,7 +503,7 @@ public static partial class ModEntry
 		HashSet<int> skipVoterSlots = new HashSet<int>();
 		for (int i = 0; i < expectedCount; i++)
 		{
-			if (votes[i] == -1)
+			if (votes[i] == SkipVoteIndex)
 			{
 				skipVoterSlots.Add(i);
 			}

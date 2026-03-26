@@ -7,6 +7,7 @@ using MegaCrit.Sts2.addons.mega_text;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Nodes.Screens.Settings;
+using RemoveMultiplayerPlayerLimit.Network;
 
 namespace RemoveMultiplayerPlayerLimit;
 
@@ -25,6 +26,8 @@ public static partial class ModEntry
 	private static readonly FieldInfo? PanelFirstControlField = AccessTools.Field(typeof(NSettingsPanel), "_firstControl");
 
 	private static readonly HashSet<NPaginator> PlayerLimitPaginators = new HashSet<NPaginator>();
+
+	private static readonly HashSet<NPaginator> DifficultyScalingPaginators = new HashSet<NPaginator>();
 
 	// ── 注入到 General 面板 Modding 行下方 ──────────────────────────────────
 
@@ -58,7 +61,9 @@ public static partial class ModEntry
 	{
 		private static void Postfix(NPaginator __instance, int index)
 		{
-			if (!PlayerLimitPaginators.Contains(__instance))
+			bool isPlayerLimit = PlayerLimitPaginators.Contains(__instance);
+			bool isDifficultyScaling = DifficultyScalingPaginators.Contains(__instance);
+			if (!isPlayerLimit && !isDifficultyScaling)
 			{
 				return;
 			}
@@ -75,11 +80,15 @@ public static partial class ModEntry
 			{
 				label.SetTextAutoSize(options[index]);
 			}
-			if (int.TryParse(options[index], out int newLimit))
+			if (isPlayerLimit && int.TryParse(options[index], out int newLimit))
 			{
-				TargetPlayerLimit = Math.Clamp(newLimit, MinSupportedPlayerLimit, MaxSupportedPlayerLimit);
-				SaveModConfig();
+				ProtocolConfig.SetTargetPlayerLimit(newLimit);
 			}
+			else if (isDifficultyScaling)
+			{
+				ProtocolConfig.SetDifficultyScalingEnabled(options[index] == "ON");
+			}
+			SaveModConfig();
 		}
 	}
 
@@ -140,12 +149,45 @@ public static partial class ModEntry
 		vbox.AddChild(row);
 		vbox.MoveChild(row, insertIndex + 1);
 
-		// 6. 设置选项并重建焦点链
+		// 6. 设置选项
 		SetupPlayerLimitPaginator(paginator);
+
+		// 7. 难度缩放开关行
+		MarginContainer scalingRow = new MarginContainer();
+		scalingRow.Name = "RmpDifficultyScaling";
+		scalingRow.CustomMinimumSize = new Vector2(0, 64);
+		scalingRow.AddThemeConstantOverride("margin_left", 12);
+		scalingRow.AddThemeConstantOverride("margin_top", 0);
+		scalingRow.AddThemeConstantOverride("margin_right", 12);
+		scalingRow.AddThemeConstantOverride("margin_bottom", 0);
+
+		if (templateLabel != null)
+		{
+			RichTextLabel scalingLabel = (RichTextLabel)templateLabel.Duplicate();
+			scalingLabel.Text = GetLocalizedText("SETTINGS_DIFFICULTY_SCALING_LABEL", "Difficulty Scaling");
+			scalingLabel.MouseFilter = Control.MouseFilterEnum.Ignore;
+			scalingRow.AddChild(scalingLabel);
+		}
+
+		NPaginator? scalingPaginator = CreateModPaginator("DifficultyScalingPaginator");
+		if (scalingPaginator != null)
+		{
+			scalingRow.AddChild(scalingPaginator);
+			vbox.AddChild(scalingRow);
+			vbox.MoveChild(scalingRow, insertIndex + 2);
+			SetupDifficultyScalingPaginator(scalingPaginator);
+		}
+
+		// 8. 重建焦点链
 		RebuildPanelFocusChain(generalPanel);
 	}
 
 	private static NPaginator? CreatePlayerLimitPaginator()
+	{
+		return CreateModPaginator("PlayerLimitPaginator");
+	}
+
+	private static NPaginator? CreateModPaginator(string name)
 	{
 		string scenePath = SceneHelper.GetScenePath("screens/paginator");
 		PackedScene? scene = ResourceLoader.Load<PackedScene>(scenePath, null, ResourceLoader.CacheMode.Reuse);
@@ -159,7 +201,7 @@ public static partial class ModEntry
 		Node template = scene.Instantiate();
 
 		NPaginator paginator = new NPaginator();
-		paginator.Name = "PlayerLimitPaginator";
+		paginator.Name = name;
 		paginator.CustomMinimumSize = new Vector2(324, 64);
 		paginator.SizeFlagsHorizontal = Control.SizeFlags.ShrinkEnd;
 		paginator.FocusMode = Control.FocusModeEnum.All;
@@ -196,11 +238,11 @@ public static partial class ModEntry
 			return;
 		}
 		options.Clear();
-		for (int i = MinSupportedPlayerLimit; i <= MaxSupportedPlayerLimit; i++)
+		for (int i = ProtocolConfig.MinPlayerLimit; i <= ProtocolConfig.MaxPlayerLimit; i++)
 		{
 			options.Add(i.ToString());
 		}
-		int currentIndex = Math.Max(0, options.IndexOf(TargetPlayerLimit.ToString()));
+		int currentIndex = Math.Max(0, options.IndexOf(ProtocolConfig.TargetPlayerLimit.ToString()));
 		PaginatorCurrentIndexField?.SetValue(paginator, currentIndex);
 		if (PaginatorLabelField?.GetValue(paginator) is MegaLabel label)
 		{
@@ -208,6 +250,25 @@ public static partial class ModEntry
 		}
 		PlayerLimitPaginators.Add(paginator);
 		paginator.TreeExiting += () => PlayerLimitPaginators.Remove(paginator);
+	}
+
+	private static void SetupDifficultyScalingPaginator(NPaginator paginator)
+	{
+		if (PaginatorOptionsField?.GetValue(paginator) is not List<string> options)
+		{
+			return;
+		}
+		options.Clear();
+		options.Add("OFF");
+		options.Add("ON");
+		int currentIndex = ProtocolConfig.DifficultyScalingEnabled ? 1 : 0;
+		PaginatorCurrentIndexField?.SetValue(paginator, currentIndex);
+		if (PaginatorLabelField?.GetValue(paginator) is MegaLabel label)
+		{
+			label.SetTextAutoSize(options[currentIndex]);
+		}
+		DifficultyScalingPaginators.Add(paginator);
+		paginator.TreeExiting += () => DifficultyScalingPaginators.Remove(paginator);
 	}
 
 	private static void RebuildPanelFocusChain(NSettingsPanel panel)

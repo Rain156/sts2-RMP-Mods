@@ -4,7 +4,7 @@
 
 [**简体中文**](README_ZH.md) | [**Changelog**](Changelog.md)
 
-![Version](https://img.shields.io/badge/Version-0.0.5A-blue.svg)
+![Version](https://img.shields.io/badge/Version-0.0.6-blue.svg)
 ![Game](https://img.shields.io/badge/Slay_The_Spire_2-Mod-red.svg)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20|%20macOS%20|%20Linux-lightgrey.svg)
 
@@ -35,6 +35,7 @@ This mod elegantly increases the multiplayer lobby limit. By default, it perfect
 * 💰 **Organized Shop Layout:** When visiting the merchant with a large group, player models are automatically arranged into neat grids (rows and columns) to prevent crowding and overlapping.
 * 🎁 **Smart Treasure Room:** The relic selection screen automatically scales, intelligently splitting **relic slots** into two perfectly centered rows when needed.
 * 📝 **Customizable Limit:** Adjust the maximum player count (4–16) directly from the in-game settings screen, under the General tab below the Modding section. The macOS TLS workaround can be toggled via `config.ini`.
+* ⚔️ **Difficulty Scaling:** When enabled, monster HP, block, and power amounts continue to scale beyond the vanilla 4-player cap, keeping combat challenging for game. Can be toggled from the settings screen.
 
 ## 🎮 Installation
 
@@ -89,7 +90,7 @@ Linux uses the same mod folder layout as Windows, but the game executable and Go
 
 ## ⚙️ Configuration
 
-Open the in-game settings screen. In the **General** tab, scroll down past the **Modding** row — the **Max Players** paginator lets you adjust the lobby player limit (4–16) in real time.
+The **Max Players** paginator lets you adjust the lobby player limit (4–16) in real time. A **Difficulty Scaling** toggle is also available to control whether monster stats scale beyond 4 players.
 
 The macOS TLS compatibility workaround can only be changed by editing `config.ini` manually.
 
@@ -103,6 +104,7 @@ tls_workaround=true
 
 [multiplayer]
 max_player_limit=8
+difficulty_scaling=true
 ```
 
 > **Important for upgrading from older releases:** If you already have `mods/RemoveMultiplayerPlayerLimit/config.json` from an older version, delete that file once before launching the new build. StS2 scans JSON files in the mod folder as manifests, but `config.ini` is safe.
@@ -120,6 +122,9 @@ Special thanks to the following contributors:
    </a>
    <a href="https://github.com/DawningW">
       <img src="https://github.com/DawningW.png?size=96" alt="DawningW" width="96" height="96" />
+   </a>
+   <a href="https://github.com/VariianWrynn">
+      <img src="https://github.com/VariianWrynn.png?size=96" alt="VariianWrynn" width="96" height="96" />
    </a>
 </div>
 

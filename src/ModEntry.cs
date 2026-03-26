@@ -6,29 +6,16 @@ using System.Text.Json;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Modding;
+using RemoveMultiplayerPlayerLimit.Network;
 
 namespace RemoveMultiplayerPlayerLimit;
 
 [ModInitializer("Initialize")]
 public static partial class ModEntry
 {
-	private const int DefaultPlayerLimit = 8;
-
-	private const int MinSupportedPlayerLimit = 4;
-
-	private const int MaxSupportedPlayerLimit = 16;
-
-	private const int ProtocolSlotIdBits = 4;
-
-	private const int ProtocolLobbyListLengthBits = 5;
-
 	private const bool DefaultMacOsTlsWorkaroundEnabled = true;
 
-	private const int VanillaMultiplayerHolderCount = 4;
-
-	private const int VanillaSlotIdBits = 2;
-
-	private const int VanillaLobbyListLengthBits = 3;
+	internal const int VanillaMultiplayerHolderCount = 4;
 
 	private const string ModFolderName = "RemoveMultiplayerPlayerLimit";
 
@@ -36,26 +23,18 @@ public static partial class ModEntry
 
 	private const string LegacyConfigFileName = "config.json";
 
-	private static int TargetPlayerLimit { get; set; } = DefaultPlayerLimit;
-
-	private static int SlotIdBits { get; set; } = ProtocolSlotIdBits;
-
-	private static int LobbyListLengthBits { get; set; } = ProtocolLobbyListLengthBits;
-
 	private static bool MacOsTlsWorkaroundEnabled { get; set; } = DefaultMacOsTlsWorkaroundEnabled;
 
 	private static string? ConfigFilePath { get; set; }
-
-	private static readonly FieldInfo? MaxPlayersField = AccessTools.Field(typeof(MegaCrit.Sts2.Core.Multiplayer.Game.Lobby.StartRunLobby), "<MaxPlayers>k__BackingField");
 
 	public static void Initialize()
 	{
 		LoadOrCreateConfig();
 		EnsureLinuxHarmonyDependenciesLoaded();
-		int slotIdCapacity = 1 << SlotIdBits;
-		int lobbyListLengthCapacity = 1 << LobbyListLengthBits;
+		int slotIdCapacity = 1 << ProtocolConfig.SlotIdBits;
+		int lobbyListLengthCapacity = 1 << ProtocolConfig.LobbyListLengthBits;
 		new Harmony("cn.remove.multiplayer.playerlimit").PatchAll();
-		Log.Info($"RemoveMultiplayerPlayerLimit loaded. Target limit: {TargetPlayerLimit}, protocol slot bits: {SlotIdBits}, slot capacity: {slotIdCapacity}, protocol lobby bits: {LobbyListLengthBits}, lobby list capacity: {lobbyListLengthCapacity}, macOS TLS workaround: {MacOsTlsWorkaroundEnabled}");
+		Log.Info($"RemoveMultiplayerPlayerLimit loaded. Target limit: {ProtocolConfig.TargetPlayerLimit}, protocol slot bits: {ProtocolConfig.SlotIdBits}, slot capacity: {slotIdCapacity}, protocol lobby bits: {ProtocolConfig.LobbyListLengthBits}, lobby list capacity: {lobbyListLengthCapacity}, difficulty scaling: {ProtocolConfig.DifficultyScalingEnabled}, macOS TLS workaround: {MacOsTlsWorkaroundEnabled}");
 	}
 
 	private static void LoadOrCreateConfig()
@@ -112,7 +91,10 @@ public static partial class ModEntry
 					MacOsTlsWorkaroundEnabled = string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
 					break;
 				case "multiplayer" when key == "max_player_limit" && int.TryParse(value, out int rawLimit):
-					TargetPlayerLimit = Math.Clamp(rawLimit, MinSupportedPlayerLimit, MaxSupportedPlayerLimit);
+					ProtocolConfig.SetTargetPlayerLimit(rawLimit);
+					break;
+				case "multiplayer" when key == "difficulty_scaling":
+					ProtocolConfig.SetDifficultyScalingEnabled(string.Equals(value, "true", StringComparison.OrdinalIgnoreCase));
 					break;
 			}
 		}
@@ -131,7 +113,8 @@ public static partial class ModEntry
 			writer.WriteLine($"tls_workaround={MacOsTlsWorkaroundEnabled.ToString().ToLowerInvariant()}");
 			writer.WriteLine();
 			writer.WriteLine("[multiplayer]");
-			writer.WriteLine($"max_player_limit={TargetPlayerLimit}");
+			writer.WriteLine($"max_player_limit={ProtocolConfig.TargetPlayerLimit}");
+			writer.WriteLine($"difficulty_scaling={ProtocolConfig.DifficultyScalingEnabled.ToString().ToLowerInvariant()}");
 		}
 		catch (Exception ex)
 		{
@@ -146,7 +129,7 @@ public static partial class ModEntry
 			using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(jsonPath));
 			if (doc.RootElement.TryGetProperty("max_player_limit", out JsonElement limitEl) && limitEl.TryGetInt32(out int raw))
 			{
-				TargetPlayerLimit = Math.Clamp(raw, MinSupportedPlayerLimit, MaxSupportedPlayerLimit);
+				ProtocolConfig.SetTargetPlayerLimit(raw);
 			}
 			if (doc.RootElement.TryGetProperty("macos_tls_workaround", out JsonElement tlsEl))
 			{

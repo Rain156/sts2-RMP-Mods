@@ -1,3 +1,24 @@
+## 0.0.6 Version Changelog (English)
+
+### Features
+* Added monster difficulty scaling for 5+ players: monster HP, block, and power amounts now continue to scale beyond the vanilla 4-player cap using the official formula.
+* Added a "Difficulty Scaling" toggle in the Settings screen to enable or disable this feature.
+
+### Improvements
+* Introduced a fully independent mod network protocol channel (RMP protocol) that runs concurrently alongside the official packet system without interference.
+
+## 0.0.6 版本更改日志（中文）
+
+### 新功能
+* 新增 5 人以上怪物难度缩放：怪物血量、格挡及能力数值将在原版 4 人上限之后继续按官方公式提升。
+* 在游戏设置界面新增"难度缩放"开关，可随时启用或关闭该功能。
+
+### 改进
+* 引入完全独立的模组网络协议通道（RMP 协议），与官方数据包系统并行运行，互不干扰。
+
+
+-------------------------------------------------------------------
+
 ## 0.0.5A Version Changelog (English)
 
 ### Features

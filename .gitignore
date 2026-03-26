@@ -2,7 +2,6 @@
 .godot/
 /android/
 .tools/
-.build/
 build/
 libs/
 
