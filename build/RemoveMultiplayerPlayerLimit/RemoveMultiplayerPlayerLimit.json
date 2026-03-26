@@ -2,7 +2,7 @@
   "id": "RemoveMultiplayerPlayerLimit",
   "pck_name": "RemoveMultiplayerPlayerLimit",
   "name": "RemoveMultiplayerPlayerLimit",
-  "version": "0.0.5A-Beta",
+  "version": "0.0.6-Beta",
   "author": "Rain_G",
   "description": "Raise multiplayer player cap from 4 to 16.",
   "dependencies": [],
