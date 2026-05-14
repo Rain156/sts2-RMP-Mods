@@ -37,6 +37,22 @@ internal static class TranspilerUtils
 		int sourceBitWidth,
 		int targetBitWidth,
 		string patchName)
+		=> ReplaceBitWidthBeforeCall(instructions,
+			targetMethod,
+			sourceBitWidth,
+			targetBitWidth,
+			patchName,
+			requireReplacement: true,
+			out _);
+
+	internal static IEnumerable<CodeInstruction> ReplaceBitWidthBeforeCall(
+		IEnumerable<CodeInstruction> instructions,
+		MethodInfo? targetMethod,
+		int sourceBitWidth,
+		int targetBitWidth,
+		string patchName,
+		bool requireReplacement,
+		out int replacementCount)
 	{
 		MethodInfo resolvedTargetMethod = targetMethod
 			?? throw new InvalidOperationException($"{patchName}: target method is null.");
@@ -59,7 +75,9 @@ internal static class TranspilerUtils
 			count++;
 		}
 
-		if (count == 0)
+		replacementCount = count;
+
+		if (requireReplacement && count == 0)
 		{
 			throw new InvalidOperationException(
 				$"{patchName}: no bit-width operand replaced for method " +
