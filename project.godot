@@ -10,6 +10,6 @@ config_version=5
 
 [application]
 
-config/name="Remove Multiplayer PlayetLimit"
+config/name="Remove Multiplayer PlayerLimit"
 config/features=PackedStringArray("4.5", "Forward Plus")
 config/icon="res://icon.svg"

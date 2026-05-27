@@ -1,61 +1,453 @@
-$ErrorActionPreference = "Stop"
+param(
+    [ValidateSet("Debug", "Release")]
+    [string]$Configuration = "Release",
+    [string]$Sts2AssemblyPath = "",
+    [string]$SteamworksAssemblyPath = ""
+)
+
+function Fail($Message) {
+    Write-Host "  [FAIL] $Message" -ForegroundColor Red
+    exit 1
+}
+
+function Invoke-External {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments,
+        [Parameter(Mandatory = $true)]
+        [string]$StepName
+    )
+
+    & $FilePath @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        Fail "$StepName failed with exit code $LASTEXITCODE"
+    }
+}
+
+function Wait-ForPath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$LiteralPath,
+        [int]$RetryCount = 50,
+        [int]$DelayMilliseconds = 200
+    )
+
+    for ($i = 0; $i -lt $RetryCount; $i++) {
+        if (Test-Path -LiteralPath $LiteralPath) {
+            return $true
+        }
+
+        Start-Sleep -Milliseconds $DelayMilliseconds
+    }
+
+    return $false
+}
+
+function Remove-PathWithRetry {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$LiteralPath,
+        [int]$RetryCount = 30,
+        [int]$DelayMilliseconds = 300
+    )
+
+    if (-not (Test-Path -LiteralPath $LiteralPath)) {
+        return
+    }
+
+    for ($i = 0; $i -lt $RetryCount; $i++) {
+        try {
+            Remove-Item -LiteralPath $LiteralPath -Recurse -Force -ErrorAction Stop
+            return
+        } catch {
+            Start-Sleep -Milliseconds $DelayMilliseconds
+        }
+    }
+
+    Fail "Failed to remove $LiteralPath after multiple retries."
+}
+
+function Resolve-GodotPath {
+    param([string]$Root)
+
+    if ($env:GODOT_PATH -and (Test-Path $env:GODOT_PATH)) {
+        return $env:GODOT_PATH
+    }
+
+    $candidates = @(
+        (Join-Path $Root "libs\Godot_v4.5.1-stable_win64_console.exe"),
+        (Join-Path $Root "libs\Godot_v4.5-stable_win64_console.exe"),
+        (Join-Path $Root "libs\Godot_v4.5.1-stable_win64.exe"),
+        (Join-Path $Root "libs\Godot_v4.5-stable_win64.exe")
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    foreach ($commandName in @("godot4", "godot")) {
+        $command = Get-Command $commandName -ErrorAction SilentlyContinue
+        if ($command) {
+            return $command.Source
+        }
+    }
+
+    Fail "Godot 4.5.x was not found. Put it under libs/ or set GODOT_PATH."
+}
+
+function Resolve-SteamLibraryRoots {
+    $roots = New-Object System.Collections.Generic.List[string]
+
+    $steamPath = $null
+    try { $steamPath = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam' -ErrorAction Stop).InstallPath } catch {}
+    if (-not $steamPath) {
+        try { $steamPath = (Get-ItemProperty 'HKCU:\SOFTWARE\Valve\Steam' -ErrorAction Stop).SteamPath } catch {}
+    }
+
+    if ($steamPath -and (Test-Path -LiteralPath $steamPath)) {
+        $roots.Add($steamPath)
+
+        $libraryVdf = Join-Path $steamPath 'steamapps\libraryfolders.vdf'
+        if (Test-Path -LiteralPath $libraryVdf) {
+            foreach ($line in Get-Content -LiteralPath $libraryVdf) {
+                if ($line -match '"path"\s+"([^"]+)"') {
+                    $libraryPath = $Matches[1].Replace('\\', '\')
+                    if (Test-Path -LiteralPath $libraryPath) {
+                        $roots.Add($libraryPath)
+                    }
+                }
+            }
+        }
+    }
+
+    foreach ($drive in Get-PSDrive -PSProvider FileSystem) {
+        foreach ($candidate in @(
+            (Join-Path $drive.Root 'SteamLibrary'),
+            (Join-Path $drive.Root 'Steam')
+        )) {
+            if (Test-Path -LiteralPath $candidate) {
+                $roots.Add($candidate)
+            }
+        }
+    }
+
+    return $roots | Select-Object -Unique
+}
+
+function Get-Sts2DllCandidatesForGamePath {
+    param([string]$GamePath)
+
+    return @(
+        (Join-Path $GamePath 'data_sts2_windows_x86_64\sts2.dll'),
+        (Join-Path $GamePath 'data_sts2_linux_x86_64\sts2.dll'),
+        (Join-Path $GamePath 'data_sts2_macos_x86_64\sts2.dll'),
+        (Join-Path $GamePath 'SlayTheSpire2.app\Contents\MacOS\data_sts2_macos_x86_64\sts2.dll'),
+        (Join-Path $GamePath 'sts2.dll')
+    )
+}
+
+function Get-SteamworksDllCandidatesForGamePath {
+    param([string]$GamePath)
+
+    return @(
+        (Join-Path $GamePath 'data_sts2_windows_x86_64\Steamworks.NET.dll'),
+        (Join-Path $GamePath 'data_sts2_linux_x86_64\Steamworks.NET.dll'),
+        (Join-Path $GamePath 'data_sts2_macos_x86_64\Steamworks.NET.dll'),
+        (Join-Path $GamePath 'SlayTheSpire2.app\Contents\MacOS\data_sts2_macos_x86_64\Steamworks.NET.dll'),
+        (Join-Path $GamePath 'Steamworks.NET.dll')
+    )
+}
+
+function Resolve-Sts2AssemblyPath {
+    param(
+        [string]$Root,
+        [string]$ExplicitPath
+    )
+
+    $candidates = New-Object System.Collections.Generic.List[string]
+
+    if (-not [string]::IsNullOrWhiteSpace($ExplicitPath)) {
+        $candidates.Add($ExplicitPath)
+    }
+
+    if ($env:Sts2AssemblyPath) {
+        $candidates.Add($env:Sts2AssemblyPath)
+    }
+    if ($env:STS2_ASSEMBLY_PATH) {
+        $candidates.Add($env:STS2_ASSEMBLY_PATH)
+    }
+
+    foreach ($gamePath in @($env:STS2GamePath, $env:STS2_GAME_PATH)) {
+        if (-not [string]::IsNullOrWhiteSpace($gamePath)) {
+            foreach ($candidate in Get-Sts2DllCandidatesForGamePath -GamePath $gamePath) {
+                $candidates.Add($candidate)
+            }
+        }
+    }
+
+    foreach ($libraryRoot in Resolve-SteamLibraryRoots) {
+        $gamePath = Join-Path $libraryRoot 'steamapps\common\Slay the Spire 2'
+        foreach ($candidate in Get-Sts2DllCandidatesForGamePath -GamePath $gamePath) {
+            $candidates.Add($candidate)
+        }
+    }
+
+    $candidates.Add((Join-Path $Root 'libs\sts2.dll'))
+
+    foreach ($candidate in $candidates | Select-Object -Unique) {
+        if (Test-Path -LiteralPath $candidate) {
+            return $candidate
+        }
+    }
+
+    Fail "sts2.dll was not found. Set STS2GamePath or Sts2AssemblyPath."
+}
+
+function Resolve-SteamworksAssemblyPath {
+    param(
+        [string]$Root,
+        [string]$ExplicitPath
+    )
+
+    $candidates = New-Object System.Collections.Generic.List[string]
+
+    if (-not [string]::IsNullOrWhiteSpace($ExplicitPath)) {
+        $candidates.Add($ExplicitPath)
+    }
+
+    if ($env:SteamworksAssemblyPath) {
+        $candidates.Add($env:SteamworksAssemblyPath)
+    }
+    if ($env:STEAMWORKS_ASSEMBLY_PATH) {
+        $candidates.Add($env:STEAMWORKS_ASSEMBLY_PATH)
+    }
+
+    foreach ($gamePath in @($env:STS2GamePath, $env:STS2_GAME_PATH)) {
+        if (-not [string]::IsNullOrWhiteSpace($gamePath)) {
+            foreach ($candidate in Get-SteamworksDllCandidatesForGamePath -GamePath $gamePath) {
+                $candidates.Add($candidate)
+            }
+        }
+    }
+
+    foreach ($libraryRoot in Resolve-SteamLibraryRoots) {
+        $gamePath = Join-Path $libraryRoot 'steamapps\common\Slay the Spire 2'
+        foreach ($candidate in Get-SteamworksDllCandidatesForGamePath -GamePath $gamePath) {
+            $candidates.Add($candidate)
+        }
+    }
+
+    $candidates.Add((Join-Path $Root 'libs\Steamworks.NET.dll'))
+
+    foreach ($candidate in $candidates | Select-Object -Unique) {
+        if (Test-Path -LiteralPath $candidate) {
+            return $candidate
+        }
+    }
+
+    Fail "Steamworks.NET.dll was not found. Set STS2GamePath or SteamworksAssemblyPath."
+}
+
+function Write-MinimalProjectFile {
+    param([string]$ProjectPath)
+
+    @'
+; Auto-generated by tools/build_release.ps1
+config_version=5
+
+[application]
+
+config/name="Remove Multiplayer PlayerLimit"
+config/features=PackedStringArray("4.5", "Forward Plus")
+'@ | Set-Content -LiteralPath $ProjectPath -Encoding UTF8
+}
+
+function Write-ConfigTemplate {
+    param([string]$DestinationPath)
+
+    @'
+[macos]
+tls_workaround=true
+
+[multiplayer]
+difficulty_scaling=true
+'@ | Set-Content -LiteralPath $DestinationPath -Encoding ASCII
+}
+
+function New-PackProject {
+    param(
+        [string]$Root,
+        [string]$PackProjectPath
+    )
+
+    if (Test-Path $PackProjectPath) {
+        Remove-Item -LiteralPath $PackProjectPath -Recurse -Force
+    }
+
+    New-Item -ItemType Directory -Force -Path $PackProjectPath | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $PackProjectPath "tools") | Out-Null
+
+    Write-MinimalProjectFile (Join-Path $PackProjectPath "project.godot")
+    Copy-Item -LiteralPath (Join-Path $Root "RemoveMultiplayerPlayerLimit.json") -Destination (Join-Path $PackProjectPath "RemoveMultiplayerPlayerLimit.json") -Force
+    Copy-Item -LiteralPath (Join-Path $Root "RemoveMultiplayerPlayerLimit") -Destination (Join-Path $PackProjectPath "RemoveMultiplayerPlayerLimit") -Recurse -Force
+    Copy-Item -LiteralPath (Join-Path $Root "tools\build_pck.gd") -Destination (Join-Path $PackProjectPath "tools\build_pck.gd") -Force
+}
+
+function Get-ModMetadata {
+    param([string]$ManifestPath)
+
+    $manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
+    $version = [string]$manifest.version
+    $folderName = if ([string]::IsNullOrWhiteSpace([string]$manifest.pck_name)) {
+        [string]$manifest.name
+    } else {
+        [string]$manifest.pck_name
+    }
+
+    if ([string]::IsNullOrWhiteSpace($version)) {
+        Fail "Manifest is missing the version field."
+    }
+
+    if ([string]::IsNullOrWhiteSpace($folderName)) {
+        Fail "Manifest is missing the name/pck_name field."
+    }
+
+    return @{
+        Version = $version
+        FolderName = $folderName
+    }
+}
 
 $root = Split-Path -Parent $PSScriptRoot
-$dotnet = "C:\Program Files\dotnet\dotnet.exe"
-$godot = "F:\Dev\Remove Multiplayer PlayerLimit\Godot 4.5.1\Godot_v4.5.1-stable_win64_console.exe"
+$dotnet = if ($env:DOTNET_PATH) { $env:DOTNET_PATH } else { "dotnet" }
+$godot = Resolve-GodotPath -Root $root
+$sts2Assembly = Resolve-Sts2AssemblyPath -Root $root -ExplicitPath $Sts2AssemblyPath
+$steamworksAssembly = Resolve-SteamworksAssemblyPath -Root $root -ExplicitPath $SteamworksAssemblyPath
+
 $buildRoot = Join-Path $root "build"
-$releaseDir = Join-Path $root "build\RemoveMultiplayerPlayerLimit"
-$dllSource = Join-Path $root ".godot\mono\temp\bin\Debug\RemoveMultiplayerPlayerLimit.dll"
-$pckSource = Join-Path $root "build\RemoveMultiplayerPlayerLimit.pck"
-$manifestPathBeta = Join-Path $root "RemoveMultiplayerPlayerLimit.json"
+$packProject = Join-Path $buildRoot "_pack_project"
+$releaseDir = Join-Path $buildRoot "RemoveMultiplayerPlayerLimit"
+$manifestPath = Join-Path $root "RemoveMultiplayerPlayerLimit.json"
+$csprojPath = Join-Path $root "RemoveMultiplayerPlayerLimit.csproj"
+$dllSource = Join-Path $root ".godot\mono\temp\bin\$Configuration\RemoveMultiplayerPlayerLimit.dll"
+$tempPckPath = Join-Path $packProject "build\RemoveMultiplayerPlayerLimit.pck"
+$finalPckPath = Join-Path $buildRoot "RemoveMultiplayerPlayerLimit.pck"
 
-& $dotnet build (Join-Path $root "RemoveMultiplayerPlayerLimit.csproj") -c Debug
-& $godot --headless --path $root --script "res://tools/build_pck.gd"
+Write-Host ""
+Write-Host "=====================================================" -ForegroundColor Cyan
+Write-Host "  RMP Build System  |  Current Mod Build" -ForegroundColor Cyan
+Write-Host "=====================================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  Root          : $root"
+Write-Host "  Configuration : $Configuration"
+Write-Host "  Dotnet        : $dotnet"
+Write-Host "  Godot         : $godot"
+Write-Host "  sts2.dll      : $sts2Assembly"
+Write-Host "  Steamworks    : $steamworksAssembly"
+Write-Host ""
 
+New-Item -ItemType Directory -Force -Path $buildRoot | Out-Null
+
+Write-Host "[1/5] Building DLL..." -ForegroundColor Yellow
+Invoke-External -FilePath $dotnet -Arguments @("build", $csprojPath, "-c", $Configuration, "/p:Sts2AssemblyPath=$sts2Assembly", "/p:SteamworksAssemblyPath=$steamworksAssembly") -StepName "dotnet build"
+if (-not (Test-Path $dllSource)) {
+    Fail "Built DLL was not found at $dllSource"
+}
+Write-Host "  DLL built successfully." -ForegroundColor Green
+Write-Host ""
+
+Write-Host "[2/5] Preparing minimal pack project..." -ForegroundColor Yellow
+New-PackProject -Root $root -PackProjectPath $packProject
+Write-Host "  Minimal pack project prepared." -ForegroundColor Green
+Write-Host ""
+
+Write-Host "[3/5] Importing mod resources..." -ForegroundColor Yellow
+Invoke-External -FilePath $godot -Arguments @("--headless", "--path", $packProject, "--import") -StepName "Godot import"
+$importedDir = Join-Path $packProject ".godot\imported"
+$ctexFiles = @()
+for ($i = 0; $i -lt 20; $i++) {
+    $ctexFiles = Get-ChildItem -LiteralPath $importedDir -Filter "mod_image.png-*.ctex" -ErrorAction SilentlyContinue
+    if ($ctexFiles) {
+        break
+    }
+
+    Start-Sleep -Milliseconds 200
+}
+if (-not $ctexFiles) {
+    Write-Host "  [WARN] mod_image.png .ctex was not generated. Cover image may not display in-game." -ForegroundColor DarkYellow
+} else {
+    Write-Host "  mod_image.png .ctex generated successfully." -ForegroundColor Green
+}
+Write-Host ""
+
+Write-Host "[4/5] Packing PCK resources..." -ForegroundColor Yellow
+Invoke-External -FilePath $godot -Arguments @("--headless", "--path", $packProject, "--script", "res://tools/build_pck.gd") -StepName "Godot PCK build"
+if (-not (Wait-ForPath -LiteralPath $tempPckPath)) {
+    Fail "Packed PCK was not found at $tempPckPath"
+}
+Copy-Item -LiteralPath $tempPckPath -Destination $finalPckPath -Force
+Write-Host "  PCK packed successfully." -ForegroundColor Green
+Write-Host ""
+
+Write-Host "[5/5] Assembling release and ZIP..." -ForegroundColor Yellow
+if (Test-Path $releaseDir) {
+    Remove-PathWithRetry -LiteralPath $releaseDir
+}
 New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 
-Get-ChildItem -Path $releaseDir -Force | Remove-Item -Recurse -Force
-Get-ChildItem -Path $buildRoot -Filter "sts2-RMP-*.zip" -File -ErrorAction SilentlyContinue | Remove-Item -Force
+Copy-Item -LiteralPath $dllSource -Destination (Join-Path $releaseDir "RemoveMultiplayerPlayerLimit.dll") -Force
+Copy-Item -LiteralPath $finalPckPath -Destination (Join-Path $releaseDir "RemoveMultiplayerPlayerLimit.pck") -Force
+Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $releaseDir "RemoveMultiplayerPlayerLimit.json") -Force
 
-Copy-Item $dllSource -Destination (Join-Path $releaseDir "RemoveMultiplayerPlayerLimit.dll") -Force
-Copy-Item $pckSource -Destination (Join-Path $releaseDir "RemoveMultiplayerPlayerLimit.pck") -Force
-Copy-Item $manifestPathBeta -Destination (Join-Path $releaseDir "RemoveMultiplayerPlayerLimit.json") -Force
+$rootConfigPath = Join-Path $root "config.ini"
+$releaseConfigPath = Join-Path $releaseDir "config.ini"
+if (Test-Path $rootConfigPath) {
+    Copy-Item -LiteralPath $rootConfigPath -Destination $releaseConfigPath -Force
+} else {
+    Write-ConfigTemplate -DestinationPath $releaseConfigPath
+}
 
-$manifest = Get-Content $manifestPathBeta -Raw | ConvertFrom-Json
-$version = [string]$manifest.version
-$modFolderName = if ([string]::IsNullOrWhiteSpace([string]$manifest.pck_name)) { [string]$manifest.name } else { [string]$manifest.pck_name }
-if ([string]::IsNullOrWhiteSpace($version)) { throw "RemoveMultiplayerPlayerLimit.json missing version field" }
-if ([string]::IsNullOrWhiteSpace($modFolderName)) { throw "RemoveMultiplayerPlayerLimit.json missing name/pck_name field" }
-
+$metadata = Get-ModMetadata -ManifestPath $manifestPath
+$version = $metadata.Version
+$modFolderName = $metadata.FolderName
 $zipName = "sts2-RMP-$version.zip"
 $zipPath = Join-Path $buildRoot $zipName
 $zipStageRoot = Join-Path $buildRoot "_zip_stage"
 $zipModFolder = Join-Path $zipStageRoot $modFolderName
 
-if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-if (Test-Path $zipStageRoot) { Remove-Item $zipStageRoot -Recurse -Force }
+if (Test-Path $zipPath) {
+    Remove-Item -LiteralPath $zipPath -Force
+}
+if (Test-Path $zipStageRoot) {
+    Remove-Item -LiteralPath $zipStageRoot -Recurse -Force
+}
 
 New-Item -ItemType Directory -Force -Path $zipModFolder | Out-Null
-Copy-Item (Join-Path $releaseDir "*") -Destination $zipModFolder -Recurse -Force
+Copy-Item -Path (Join-Path $releaseDir "*") -Destination $zipModFolder -Recurse -Force
 
-# Generate one-click installer scripts into zip stage root
+$installBatPath = Join-Path $zipStageRoot "Install.bat"
+$helperPs1Path = Join-Path $zipStageRoot "helper.ps1"
+
 @'
 @echo off
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0helper.ps1"
 pause
-'@ | Set-Content (Join-Path $zipStageRoot "Install.bat") -Encoding ASCII
+'@ | Set-Content -LiteralPath $installBatPath -Encoding ASCII
 
-@'
+$helperTemplate = @'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $host.UI.RawUI.WindowTitle = 'Remove Multiplayer Player Limit - Installer'
 
 Write-Host '============================================'
-Write-Host '  Remove Multiplayer Player Limit'
-Write-Host '  One-Click Installer | 一键安装程序'
+Write-Host '  Remove Multiplayer Player Limit v{VERSION}'
+Write-Host '  One-Click Installer'
 Write-Host '============================================'
 Write-Host ''
 
-# ── Validate mod files exist next to this script ──────────────────────
 $src = $PSScriptRoot
 $modFolder = Join-Path $src 'RemoveMultiplayerPlayerLimit'
 $dll  = Join-Path $modFolder 'RemoveMultiplayerPlayerLimit.dll'
@@ -69,89 +461,75 @@ if (-not (Test-Path $json)) { $missing += 'RemoveMultiplayerPlayerLimit.json' }
 
 if ($missing.Count -gt 0) {
     Write-Host '[ERROR] Missing mod files:' -ForegroundColor Red
-    Write-Host '[错误] 缺少以下模组文件：' -ForegroundColor Red
-    foreach ($f in $missing) { Write-Host "  - $f" -ForegroundColor Red }
-    Write-Host ''
-    Write-Host 'Please make sure this script is in the same folder as the'
-    Write-Host '"RemoveMultiplayerPlayerLimit" directory from the release zip.'
-    Write-Host '请确保本脚本与 RemoveMultiplayerPlayerLimit 文件夹在同一目录下。'
+    foreach ($file in $missing) { Write-Host "  - $file" -ForegroundColor Red }
     exit 1
 }
 
-Write-Host 'Searching for Slay the Spire 2 installation...'
-Write-Host '正在搜索「杀戮尖塔 2」安装目录，请稍候...'
-Write-Host ''
-
-# ── Detect Steam install path from Windows Registry ──────────────────
-$sp = $null
-try { $sp = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam' -EA Stop).InstallPath } catch {}
-if (-not $sp) {
-    try { $sp = (Get-ItemProperty 'HKCU:\SOFTWARE\Valve\Steam' -EA Stop).SteamPath } catch {}
+$steamPath = $null
+try { $steamPath = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam' -ErrorAction Stop).InstallPath } catch {}
+if (-not $steamPath) {
+    try { $steamPath = (Get-ItemProperty 'HKCU:\SOFTWARE\Valve\Steam' -ErrorAction Stop).SteamPath } catch {}
 }
 
-# ── Parse libraryfolders.vdf to find all Steam library paths ─────────
-$gp = $null
-if ($sp) {
-    $vdf = Join-Path $sp 'steamapps\libraryfolders.vdf'
-    if (Test-Path $vdf) {
-        foreach ($line in Get-Content $vdf) {
+$gamePath = $null
+if ($steamPath) {
+    $libraryVdf = Join-Path $steamPath 'steamapps\libraryfolders.vdf'
+    if (Test-Path $libraryVdf) {
+        foreach ($line in Get-Content $libraryVdf) {
             if ($line -match '"path"\s+"([^"]+)"') {
-                $p = $Matches[1].Replace('\\', '\')
-                $c = Join-Path $p 'steamapps\common\Slay the Spire 2'
-                if (Test-Path $c) { $gp = $c; break }
+                $libraryPath = $Matches[1].Replace('\\', '\')
+                $candidate = Join-Path $libraryPath 'steamapps\common\Slay the Spire 2'
+                if (Test-Path $candidate) {
+                    $gamePath = $candidate
+                    break
+                }
             }
         }
     }
-    # Fallback: check the main Steam directory itself
-    if (-not $gp) {
-        $c = Join-Path $sp 'steamapps\common\Slay the Spire 2'
-        if (Test-Path $c) { $gp = $c }
+
+    if (-not $gamePath) {
+        $candidate = Join-Path $steamPath 'steamapps\common\Slay the Spire 2'
+        if (Test-Path $candidate) {
+            $gamePath = $candidate
+        }
     }
 }
 
-# ── Install ──────────────────────────────────────────────────────────
-if ($gp) {
-    Write-Host "Found game directory | 找到游戏目录：" -ForegroundColor Green
-    Write-Host "  $gp" -ForegroundColor Green
-    Write-Host ''
-
-    $dest = Join-Path $gp 'mods\RemoveMultiplayerPlayerLimit'
-    New-Item -ItemType Directory -Force -Path $dest | Out-Null
-    Copy-Item (Join-Path $modFolder '*') -Destination $dest -Recurse -Force
-
-    Write-Host '============================================'
-    Write-Host '  Installation successful!' -ForegroundColor Green
-    Write-Host '  安装成功！' -ForegroundColor Green
-    Write-Host '============================================'
-    Write-Host ''
-    Write-Host 'The mod will be enabled automatically when you launch the game.'
-    Write-Host '启动游戏后模组将自动生效。'
-    Write-Host ''
-    Write-Host 'Installed to | 安装路径：'
-    Write-Host "  $dest"
-} else {
-    Write-Host '============================================'
-    Write-Host '  Auto-detection failed' -ForegroundColor Red
-    Write-Host '  自动安装失败' -ForegroundColor Red
-    Write-Host '============================================'
-    Write-Host ''
-    Write-Host 'Could not locate "Slay the Spire 2" automatically.'
-    Write-Host '未能自动找到「杀戮尖塔 2」安装目录。'
-    Write-Host ''
-    Write-Host 'Please copy the "RemoveMultiplayerPlayerLimit" folder manually to:'
-    Write-Host '请手动将 RemoveMultiplayerPlayerLimit 文件夹复制到：'
-    Write-Host ''
-    Write-Host '  <Slay the Spire 2>\mods\RemoveMultiplayerPlayerLimit\'
-    Write-Host ''
-    Write-Host 'Example | 示例路径：'
-    Write-Host '  D:\Steam\steamapps\common\Slay the Spire 2\mods\RemoveMultiplayerPlayerLimit\'
-    Write-Host ''
-    Write-Host 'Tip: In Steam, right-click the game > Manage > Browse Local Files'
-    Write-Host '提示：在 Steam 中右键游戏 > 管理 > 浏览本地文件'
+if (-not $gamePath) {
+    Write-Host 'Could not locate Slay the Spire 2 automatically.' -ForegroundColor Red
+    Write-Host 'Please copy RemoveMultiplayerPlayerLimit/ into <game>\mods\ manually.'
+    exit 1
 }
 
+$destination = Join-Path $gamePath 'mods\RemoveMultiplayerPlayerLimit'
+New-Item -ItemType Directory -Force -Path $destination | Out-Null
+Copy-Item -LiteralPath (Join-Path $modFolder '*') -Destination $destination -Recurse -Force
+
 Write-Host ''
-'@ | Set-Content (Join-Path $zipStageRoot "helper.ps1") -Encoding UTF8
+Write-Host 'Installation successful.' -ForegroundColor Green
+Write-Host "Installed to: $destination"
+Write-Host ''
+'@
+
+$helperTemplate.Replace("{VERSION}", $version) | Set-Content -LiteralPath $helperPs1Path -Encoding UTF8
 
 Compress-Archive -Path (Join-Path $zipStageRoot "*") -DestinationPath $zipPath -CompressionLevel Optimal
-Remove-Item $zipStageRoot -Recurse -Force
+Remove-PathWithRetry -LiteralPath $zipStageRoot
+Remove-PathWithRetry -LiteralPath $packProject
+
+$dllSize = [math]::Round((Get-Item -LiteralPath (Join-Path $releaseDir "RemoveMultiplayerPlayerLimit.dll")).Length / 1KB, 1)
+$pckSize = [math]::Round((Get-Item -LiteralPath (Join-Path $releaseDir "RemoveMultiplayerPlayerLimit.pck")).Length / 1KB, 1)
+$zipSize = [math]::Round((Get-Item -LiteralPath $zipPath).Length / 1KB, 1)
+
+Write-Host "  Release directory assembled." -ForegroundColor Green
+Write-Host ""
+Write-Host "=====================================================" -ForegroundColor Green
+Write-Host "  Build Complete!" -ForegroundColor Green
+Write-Host "=====================================================" -ForegroundColor Green
+Write-Host ""
+Write-Host "  Version  : $version"
+Write-Host "  DLL      : $dllSize KB"
+Write-Host "  PCK      : $pckSize KB"
+Write-Host "  ZIP      : $zipPath ($zipSize KB)"
+Write-Host "  Release  : $releaseDir"
+Write-Host ""

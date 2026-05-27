@@ -1,115 +1,123 @@
 <div align="center">
 
-# Remove Multiplayer Player Limit
+# Remove Multiplayer Player Limit Reforge
 
 [**简体中文**](README_ZH.md) | [**Changelog**](Changelog.md)
 
-![Version](https://img.shields.io/badge/Version-0.0.6-blue.svg)
+![Version](https://img.shields.io/badge/Version-0.1.8--beta-blue.svg)
 ![Game](https://img.shields.io/badge/Slay_The_Spire_2-Mod-red.svg)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20|%20macOS%20|%20Linux-lightgrey.svg)
+![Runtime](https://img.shields.io/badge/Runtime-Harmony--free-green.svg)
 
-# This Repository Is No Longer Maintained
-
-This repository will most likely no longer be maintained.
-
-Due to real-life and work-related reasons, I no longer have the time to continue development, fix bugs, review pull requests, or pretend that I still understand this project.
-
-This project contains a large amount of AI-generated code, and this dumbass developer no longer wants to review it line by line.
-
-From now on, you are free to use this project however you want.
-
-Fork it, rewrite it, feed it to a dog, or do whatever else you like.
-
-The license has been changed to **CC0**.
-
-
-*A Slay the Spire 2 mod that increases the vanilla 4-player multiplayer lobby limit. Gather more friends and climb the Spire together!*
+*A Harmony-free Slay the Spire 2 mod that raises the vanilla 4-player multiplayer lobby limit to 16 players.*
 
 </div>
 
-This mod elegantly increases the multiplayer lobby limit. By default, it perfectly supports **8 players** and can be configured up to **16 players** from the in-game settings screen.
+This Reforge build replaces the old Harmony patch set with a reflection and Godot SceneTree based implementation. It keeps the original goal of RMP: larger multiplayer lobbies, cleaner large-party layouts, and optional difficulty scaling for groups beyond the vanilla 4-player cap.
+
+`0.1.8-beta` is a tester build for the Slay the Spire 2 `beta 0.106.x` line.
+
+Recent fixes in this beta:
+
+- Fixed the `beta 0.106.1` mod-load failure caused by the updated `INetMessage.ShouldBuffer` interface requirement.
+- Fixed the first-treasure-room desync reported on `beta 0.106` by removing RMP's duplicate remote chest reward replay and leaving the game's one-off chest synchronization in control.
+- Fixed 5-16 player lobby flow by routing unsafe joins, ready state, and begin-run synchronization through the RMP extended lobby protocol.
+- Uses 4-bit slot IDs for player slots `0-15` and 5-bit list lengths for up to 16 lobby entries.
 
 <br>
 
 <div align="center">
-  <img src="img/combat.png" alt="Screenshot 1" width="800"/>
+  <img src="img/combat.png" alt="Combat screenshot" width="800"/>
   <br><br>
-  <img src="img/shop.png" alt="Screenshot 2" width="800"/>
+  <img src="img/shop.png" alt="Shop screenshot" width="800"/>
   <br><br>
-  <img src="img/campfire.png" alt="Screenshot 3" width="800"/>
+  <img src="img/campfire.png" alt="Campfire screenshot" width="800"/>
   <br><br>
-  <img src="img/defect.png" alt="Screenshot 4" width="800"/>
+  <img src="img/defect.png" alt="Character lineup screenshot" width="800"/>
 </div>
 
 <br>
 
 ## ✨ Core Features
 
-* 👥 **Expanded Multiplayer:** Increases the maximum lobby size up to 16 players (default is 8). **Note: Lobbies with more than 8 players may experience rendering errors and UI issues.**
-* 🏕️ **Expanded Campfire Seating:** When there are more than 4 players, character models will not overlap. Campfires automatically generate front and back rows, complete with additional background logs for everyone to sit on.
-* 💰 **Organized Shop Layout:** When visiting the merchant with a large group, player models are automatically arranged into neat grids (rows and columns) to prevent crowding and overlapping.
-* 🎁 **Smart Treasure Room:** The relic selection screen automatically scales, intelligently splitting **relic slots** into two perfectly centered rows when needed.
-* 📝 **Customizable Limit:** Adjust the maximum player count (4–16) directly from the in-game settings screen, under the General tab below the Modding section. The macOS TLS workaround can be toggled via `config.ini`.
-* ⚔️ **Difficulty Scaling:** When enabled, monster HP, block, and power amounts continue to scale beyond the vanilla 4-player cap, keeping combat challenging for game. Can be toggled from the settings screen.
+* 👥 **Expanded Multiplayer:** Raises the multiplayer lobby cap from 4 to 16 players. In `0.1.8-beta`, the cap is fixed at 16 for every hosted lobby.
+* 🏕️ **Expanded Campfire Seating:** When there are more than 4 players, character models are arranged into additional rows instead of overlapping.
+* 💰 **Organized Shop Layout:** Large groups are arranged into a cleaner shop grid to reduce crowding and model overlap.
+* 🎁 **Smart Treasure Room:** Relic reward choices scale and reflow for larger groups, while treasure reward synchronization is left to the game's one-off synchronizer.
+* 📝 **Game Settings Entry:** Adds a Difficulty Scaling control under the game's settings screen. The old max-player paginator has been removed because the current build always hosts 16-player lobbies.
+* ⚔️ **Difficulty Scaling:** When enabled, monster HP, block, and power values continue scaling beyond the vanilla 4-player cap.
+* 🌐 **RMP Extended Lobby Protocol:** Adds a mod-network protocol for large-lobby snapshots, ready state, and begin-run flow without relying on unsafe vanilla lobby messages.
+* 🍎 **macOS TLS Workaround:** Provides a `config.ini` toggle for macOS multiplayer certificate issues such as `unknown ca` / `BadCert`.
+* 🚫 **No Harmony / MonoMod:** No `[HarmonyPatch]`, transpilers, or runtime method replacement. Reforge uses the official mod entry point plus reflection and injected Godot nodes.
 
 ## 🎮 Installation
 
 ### Windows
 
-1. Download the latest `sts2-RMP-[version].zip` from the **Releases** page.
-2. Extract the archive and copy the inner `RemoveMultiplayerPlayerLimit` folder to your game directory: `<Slay the Spire 2>/mods/`.
-3. Launch the game. The mod will be enabled automatically.
+1. Download `sts2-RMP-0.1.8-beta.zip` from the release package.
+2. Extract the archive.
+3. Copy the inner `RemoveMultiplayerPlayerLimit` folder to:
+
+   ```text
+   <Slay the Spire 2>/mods/
+   ```
+
+4. Launch the game. The mod will be loaded by the game mod loader.
 
 ### macOS (Apple Silicon)
 
-macOS requires placing the mod inside the `.app` bundle and running the game under Rosetta 2.
+macOS builds may require placing the mod inside the `.app` bundle and running the game under Rosetta 2.
 
-> **Note:** Some macOS players hit `unknown ca` / `BadCert` errors when joining multiplayer. This mod now enables a macOS-only TLS workaround during multiplayer handshakes. If you need the original behavior, edit `config.ini` to disable the workaround.
+> **Note:** Some macOS players hit `unknown ca` / `BadCert` errors when joining multiplayer. Reforge includes a macOS-only TLS compatibility workaround. If you need the original certificate behavior, edit `config.ini` and set `tls_workaround=false`.
 
-1. Download the latest `sts2-RMP-[version].zip` from the **Releases** page.
+1. Download `sts2-RMP-0.1.8-beta.zip` from the release package.
 2. Extract the archive and copy the inner `RemoveMultiplayerPlayerLimit` folder to:
-   ```
+
+   ```text
    <Slay the Spire 2>/SlayTheSpire2.app/Contents/MacOS/mods/
    ```
-3. Both launch methods below bypass Steam's normal launch flow. To avoid a **"Steam failed to initialize"** error, make sure the **Steam client is running** in the background and create a `steam_appid.txt` file next to the game executable:
+
+3. If launching directly causes **"Steam failed to initialize"**, keep the Steam client running in the background and create `steam_appid.txt` next to the game executable:
+
    ```bash
    echo "2868840" > "$HOME/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/MacOS/steam_appid.txt"
    ```
-4. Run the game under Rosetta 2 using **one** of these methods:
 
-   **Option A — Finder (recommended):** Navigate to `SlayTheSpire2.app`, right-click > **Get Info**, and check **"Open using Rosetta"**. Then double-click `SlayTheSpire2.app` directly to launch (do **not** launch through Steam, as it may override the Rosetta setting).
+4. Run the game under Rosetta 2 using one of these methods:
 
-   **Option B — Terminal:** Open Terminal and run:
+   **Option A - Finder:** Find `SlayTheSpire2.app`, right-click > **Get Info**, enable **"Open using Rosetta"**, then launch the app directly.
+
+   **Option B - Terminal:**
+
    ```bash
    cd "$HOME/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/MacOS"
    arch -x86_64 "./Slay the Spire 2"
    ```
 
-5. The mod will be enabled automatically on launch.
+### Linux
 
-### Linux (Ubuntu)
+Linux uses the same mod folder layout as Windows:
 
-Linux uses the same mod folder layout as Windows, but the game executable and Godot binary names vary by distro/package.
+```text
+<Slay the Spire 2>/mods/
+```
 
-1. Download the latest `sts2-RMP-[version].zip` from the **Releases** page.
-2. Extract the archive and copy the inner `RemoveMultiplayerPlayerLimit` folder to:
-   ```
-   <Slay the Spire 2>/mods/
-   ```
-3. Start the game normally from Steam or your local executable.
-4. The mod will be enabled automatically on launch.
+Start the game normally from Steam or your local executable.
 
-> **Compatibility note:** All players must use the same mod version. Local settings may differ safely; only the host's configured limit determines how many players can actually join the lobby.
-
-> **Linux troubleshooting:** If the mod fails during startup with a Harmony / `mm-exhelper.so` error mentioning `_Unwind_RaiseException`, make sure your system runtime libraries are available to the game process. Installing `libgcc-s1`, `libstdc++6`, and `libunwind8` is usually sufficient.
+> **Compatibility note:** All players in a lobby should use the same mod build. In `0.1.8-beta`, lobby capacity is fixed at 16; local config only controls difficulty scaling and the macOS TLS workaround.
 
 ## ⚙️ Configuration
 
-The **Max Players** paginator lets you adjust the lobby player limit (4–16) in real time. A **Difficulty Scaling** toggle is also available to control whether monster stats scale beyond 4 players.
+Runtime settings are saved to:
 
-The macOS TLS compatibility workaround can only be changed by editing `config.ini` manually.
+```text
+mods/RemoveMultiplayerPlayerLimit/config.ini
+```
 
-Values are saved to `mods/RemoveMultiplayerPlayerLimit/config.ini`.
+Current configurable values:
+
+* `tls_workaround`: macOS TLS compatibility workaround. This is only useful on macOS.
+* `difficulty_scaling`: whether monster stats keep scaling beyond 4 players.
 
 Example:
 
@@ -118,11 +126,40 @@ Example:
 tls_workaround=true
 
 [multiplayer]
-max_player_limit=8
 difficulty_scaling=true
 ```
 
-> **Important for upgrading from older releases:** If you already have `mods/RemoveMultiplayerPlayerLimit/config.json` from an older version, delete that file once before launching the new build. StS2 scans JSON files in the mod folder as manifests, but `config.ini` is safe.
+`max_player_limit` from older configs is intentionally ignored in this Reforge beta. The current lobby cap is fixed at 16.
+
+> **Important for upgrading from older releases:** If you still have `mods/RemoveMultiplayerPlayerLimit/config.json` from an old build, delete it before launching Reforge. Slay the Spire 2 scans JSON files in the mod folder as manifests, while `config.ini` is safe.
+
+## 🛠️ Building
+
+Requirements:
+
+* .NET 9 SDK
+* Godot 4.5.1 for PCK packaging
+* Slay the Spire 2 `sts2.dll` and `Steamworks.NET.dll`
+
+Build the DLL:
+
+```bash
+dotnet build -c Release
+```
+
+Build a full release package:
+
+```powershell
+pwsh tools/build_release.ps1 -Configuration Release
+```
+
+For beta game branches, build against the installed game's current `sts2.dll`:
+
+```powershell
+pwsh tools/build_release.ps1 -Configuration Release -Sts2AssemblyPath "<Slay the Spire 2>/data_sts2_windows_x86_64/sts2.dll"
+```
+
+The release script also tries to find the installed game assembly automatically. This matters because game beta updates can change mod-facing interfaces such as `INetMessage`.
 
 ## Contributors
 
@@ -142,4 +179,3 @@ Special thanks to the following contributors:
       <img src="https://github.com/VariianWrynn.png?size=96" alt="VariianWrynn" width="96" height="96" />
    </a>
 </div>
-
