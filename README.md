@@ -4,7 +4,7 @@
 
 [**简体中文**](README_ZH.md) | [**Changelog**](Changelog.md)
 
-![Version](https://img.shields.io/badge/Version-0.1.8--beta-blue.svg)
+![Version](https://img.shields.io/badge/Version-0.1.8-blue.svg)
 ![Game](https://img.shields.io/badge/Slay_The_Spire_2-Mod-red.svg)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20|%20macOS%20|%20Linux-lightgrey.svg)
 ![Runtime](https://img.shields.io/badge/Runtime-Harmony--free-green.svg)
@@ -15,7 +15,7 @@
 
 This Reforge build replaces the old Harmony patch set with a reflection and Godot SceneTree based implementation. It keeps the original goal of RMP: larger multiplayer lobbies, cleaner large-party layouts, and optional difficulty scaling for groups beyond the vanilla 4-player cap.
 
-`0.1.8-beta` is a tester build for the Slay the Spire 2 `beta 0.106.x` line.
+`0.1.8` is a tester build for the Slay the Spire 2 `beta 0.106.x` line.
 
 Recent fixes in this beta:
 
@@ -40,7 +40,7 @@ Recent fixes in this beta:
 
 ## ✨ Core Features
 
-* 👥 **Expanded Multiplayer:** Raises the multiplayer lobby cap from 4 to 16 players. In `0.1.8-beta`, the cap is fixed at 16 for every hosted lobby.
+* 👥 **Expanded Multiplayer:** Raises the multiplayer lobby cap from 4 to 16 players. In `0.1.8`, the cap is fixed at 16 for every hosted lobby.
 * 🏕️ **Expanded Campfire Seating:** When there are more than 4 players, character models are arranged into additional rows instead of overlapping.
 * 💰 **Organized Shop Layout:** Large groups are arranged into a cleaner shop grid to reduce crowding and model overlap.
 * 🎁 **Smart Treasure Room:** Relic reward choices scale and reflow for larger groups, while treasure reward synchronization is left to the game's one-off synchronizer.
@@ -54,7 +54,7 @@ Recent fixes in this beta:
 
 ### Windows
 
-1. Download `sts2-RMP-0.1.8-beta.zip` from the release package.
+1. Download `sts2-RMP-0.1.8.zip` from the release package.
 2. Extract the archive.
 3. Copy the inner `RemoveMultiplayerPlayerLimit` folder to:
 
@@ -70,7 +70,7 @@ macOS builds may require placing the mod inside the `.app` bundle and running th
 
 > **Note:** Some macOS players hit `unknown ca` / `BadCert` errors when joining multiplayer. Reforge includes a macOS-only TLS compatibility workaround. If you need the original certificate behavior, edit `config.ini` and set `tls_workaround=false`.
 
-1. Download `sts2-RMP-0.1.8-beta.zip` from the release package.
+1. Download `sts2-RMP-0.1.8.zip` from the release package.
 2. Extract the archive and copy the inner `RemoveMultiplayerPlayerLimit` folder to:
 
    ```text
@@ -104,7 +104,7 @@ Linux uses the same mod folder layout as Windows:
 
 Start the game normally from Steam or your local executable.
 
-> **Compatibility note:** All players in a lobby should use the same mod build. In `0.1.8-beta`, lobby capacity is fixed at 16; local config only controls difficulty scaling and the macOS TLS workaround.
+> **Compatibility note:** All players in a lobby should use the same mod build. In `0.1.8`, lobby capacity is fixed at 16; local config only controls difficulty scaling and the macOS TLS workaround.
 
 ## ⚙️ Configuration
 

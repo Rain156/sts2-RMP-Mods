@@ -1,9 +1,9 @@
-## 0.1.8-beta Changelog (English)
+## 0.1.8 Changelog (English)
 
 ### Fixes
 * Fixed beta 0.106.1 mod-load failure by building release packages against the currently installed game `sts2.dll`, whose `INetMessage` interface now requires `ShouldBuffer`.
 
-## 0.1.8-beta 更新日志（中文）
+## 0.1.8 更新日志（中文）
 
 ### 修复
 * 修复 beta 0.106.1 下模组加载时报 `ReflectionTypeLoadException` 的问题：发布包现在会优先使用当前已安装游戏的 `sts2.dll` 编译，以匹配新增的 `INetMessage.ShouldBuffer` 接口成员。

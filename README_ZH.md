@@ -4,7 +4,7 @@
 
 [**English**](README.md) | [**更新日志**](Changelog.md)
 
-![Version](https://img.shields.io/badge/Version-0.1.8--beta-blue.svg)
+![Version](https://img.shields.io/badge/Version-0.1.8-blue.svg)
 ![Game](https://img.shields.io/badge/Slay_The_Spire_2-Mod-red.svg)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20|%20macOS%20|%20Linux-lightgrey.svg)
 ![Runtime](https://img.shields.io/badge/Runtime-Harmony--free-green.svg)
@@ -15,7 +15,7 @@
 
 Reforge 版不是旧 Harmony 补丁的继续堆叠，而是一次重写：它保留 RMP 的目标，让更多玩家一起联机，同时改善多人营地、商店、宝箱房布局，并为 4 人以上队伍提供可选难度缩放。
 
-`0.1.8-beta` 是面向《杀戮尖塔2》`beta 0.106.x` 附近版本的玩家测试版。
+`0.1.8` 是面向《杀戮尖塔2》`beta 0.106.x` 附近版本的玩家测试版。
 
 本测试版包含以下关键修复：
 
@@ -40,7 +40,7 @@ Reforge 版不是旧 Harmony 补丁的继续堆叠，而是一次重写：它保
 
 ## ✨ 核心功能
 
-* 👥 **突破人数限制：** 将联机房间人数上限从 4 人提升到 16 人。`0.1.8-beta` 中所有房间固定按 16 人容量创建。
+* 👥 **突破人数限制：** 将联机房间人数上限从 4 人提升到 16 人。`0.1.8` 中所有房间固定按 16 人容量创建。
 * 🏕️ **营地座位扩容：** 超过 4 人时，角色不会重叠在一起，而是自动排列到额外座位和队列中。
 * 💰 **商店阵列排布：** 多人同屏时，商店里的角色模型会自动排列成更清晰的网格，减少拥挤和穿模。
 * 🎁 **宝箱房自适应布局：** 遗物分配界面会根据人数缩放和重排，同时宝箱奖励同步交由游戏原版一次性同步流程处理。
@@ -54,7 +54,7 @@ Reforge 版不是旧 Harmony 补丁的继续堆叠，而是一次重写：它保
 
 ### Windows
 
-1. 下载 `sts2-RMP-0.1.8-beta.zip`。
+1. 下载 `sts2-RMP-0.1.8.zip`。
 2. 解压压缩包。
 3. 将内部的 `RemoveMultiplayerPlayerLimit` 文件夹复制到：
 
@@ -70,7 +70,7 @@ macOS 版游戏可能需要将模组放入 `.app` 包内部，并通过 Rosetta 
 
 > **注意：** 部分 macOS 玩家联机时会遇到 `unknown ca` / `BadCert`。Reforge 包含仅限 macOS 的 TLS 兼容补丁；如果你想恢复原始证书校验行为，可以编辑 `config.ini` 并设置 `tls_workaround=false`。
 
-1. 下载 `sts2-RMP-0.1.8-beta.zip`。
+1. 下载 `sts2-RMP-0.1.8.zip`。
 2. 解压并将内部的 `RemoveMultiplayerPlayerLimit` 文件夹复制到：
 
    ```text
@@ -104,7 +104,7 @@ Linux 使用与 Windows 相同的模组目录结构：
 
 之后正常通过 Steam 或本地可执行文件启动游戏即可。
 
-> **兼容性说明：** 同一房间内的所有玩家应使用同一个模组版本。`0.1.8-beta` 的房间容量固定为 16；本地配置只控制难度缩放和 macOS TLS 兼容补丁。
+> **兼容性说明：** 同一房间内的所有玩家应使用同一个模组版本。`0.1.8` 的房间容量固定为 16；本地配置只控制难度缩放和 macOS TLS 兼容补丁。
 
 ## ⚙️ 配置说明
 

@@ -29,7 +29,7 @@ public static class ModEntry
 
     public static void Initialize()
     {
-        Log.Warn("[RMP] Initializing v0.1.8-beta...");
+        Log.Warn("[RMP] Initializing v0.1.8...");
 
         Modules.Clear();
 
