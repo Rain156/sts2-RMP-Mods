@@ -67,7 +67,8 @@ public partial class ExtendedLobbyModule : IRMPModule
     private static readonly FieldInfo? DailyRunLobbyField = typeof(MegaCrit.Sts2.Core.Nodes.Screens.DailyRun.NDailyRunScreen)
         .GetField("_lobby", BindingFlags.Instance | BindingFlags.NonPublic);
     private static readonly FieldInfo? BeginningRunField = typeof(StartRunLobby)
-        .GetField("_beginningRun", BindingFlags.Instance | BindingFlags.NonPublic);
+        .GetField("_isBeginningRun", BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? typeof(StartRunLobby).GetField("_beginningRun", BindingFlags.Instance | BindingFlags.NonPublic);
 
     private static readonly HashSet<ulong> ExtendedRunStartingLobbyIds = new();
     private static readonly Dictionary<ulong, HostJoinPatchState> HostJoinPatchStates = new();
@@ -447,10 +448,56 @@ public partial class ExtendedLobbyModule : IRMPModule
             Action<NButton> replacement)
         {
             Callable originalCallable = CreatePrivateReleasedCallable(target, originalMethodName);
-            if (button.IsConnected(NClickableControl.SignalName.Released, originalCallable))
-                button.Disconnect(NClickableControl.SignalName.Released, originalCallable);
+            bool disconnectedOriginal = DisconnectReleasedHandler(button, target, originalMethodName, originalCallable);
+            if (!disconnectedOriginal)
+                Log.Warn($"[RMP:ExtendedLobby] Did not find original released handler {target.GetType().Name}.{originalMethodName}.");
 
             button.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(replacement));
+        }
+
+        private static bool DisconnectReleasedHandler(
+            NButton button,
+            object target,
+            string originalMethodName,
+            Callable originalCallable)
+        {
+            bool disconnected = false;
+            if (button.IsConnected(NClickableControl.SignalName.Released, originalCallable))
+            {
+                button.Disconnect(NClickableControl.SignalName.Released, originalCallable);
+                disconnected = true;
+            }
+
+            if (target is not GodotObject targetObject)
+                return disconnected;
+
+            foreach (var connection in button.GetSignalConnectionList(NClickableControl.SignalName.Released))
+            {
+                if (!connection.TryGetValue("callable", out Variant callableVariant))
+                    continue;
+
+                Callable callable = callableVariant.AsCallable();
+                if (!IsReleasedHandlerCallable(callable, targetObject, originalMethodName))
+                    continue;
+
+                if (button.IsConnected(NClickableControl.SignalName.Released, callable))
+                    button.Disconnect(NClickableControl.SignalName.Released, callable);
+                disconnected = true;
+            }
+
+            return disconnected;
+        }
+
+        private static bool IsReleasedHandlerCallable(Callable callable, GodotObject target, string methodName)
+        {
+            if (!ReferenceEquals(callable.Target, target))
+                return false;
+
+            if (callable.Method.ToString() == methodName)
+                return true;
+
+            return callable.Delegate?.Target == target
+                && callable.Delegate.Method.Name == methodName;
         }
 
         private static Callable CreatePrivateReleasedCallable(object target, string methodName)

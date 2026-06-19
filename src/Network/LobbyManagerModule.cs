@@ -104,6 +104,9 @@ public partial class LobbyManagerModule : IRMPModule
                 _lastPlayerCount = currentCount;
                 _lastTargetPlayerLimit = targetLimit;
             }
+
+            if (lobby.NetService?.Type == NetGameType.Host && ExtendedLobbyModule.ShouldUseExtendedLobbyProtocol(lobby))
+                ExtendedLobbyModule.TryBeginExtendedRun(lobby);
         }
 
         private void OnLobbyActivated(StartRunLobby lobby)
