@@ -15,10 +15,13 @@
 
 This Reforge build replaces the old Harmony patch set with a reflection and Godot SceneTree based implementation. It keeps the original goal of RMP: larger multiplayer lobbies, cleaner large-party layouts, and optional difficulty scaling for groups beyond the vanilla 4-player cap.
 
-`0.1.8` is a tester build for the Slay the Spire 2 `beta 0.106.x` line.
+`0.1.8` is the current stable Reforge release. It has been compatibility-checked with Slay the Spire 2 `v0.107.1` and `public-beta v0.108.0`. Both game versions use the same RMP source and network protocol; no separate `0.108`-only build is required.
 
-Recent fixes in this beta:
+Compatibility and fixes included in `0.1.8`:
 
+- Verified against `v0.108.0`: the mod compiles against the current game assemblies, passes its reflection-contract checks, initializes all RMP modules, and reaches the main menu without RMP load errors.
+- Retains `v0.107.1` compatibility by avoiding new version-specific game calls and keeping the same extended lobby wire format.
+- Preserves the host's player order when applying extended lobby snapshots, then dispatches player connection, disconnection, and state-change notifications against the completed ordered list.
 - Fixed the `beta 0.106.1` mod-load failure caused by the updated `INetMessage.ShouldBuffer` interface requirement.
 - Fixed the first-treasure-room desync reported on `beta 0.106` by removing RMP's duplicate remote chest reward replay and leaving the game's one-off chest synchronization in control.
 - Fixed 5-16 player lobby flow by routing unsafe joins, ready state, and begin-run synchronization through the RMP extended lobby protocol.
@@ -104,7 +107,7 @@ Linux uses the same mod folder layout as Windows:
 
 Start the game normally from Steam or your local executable.
 
-> **Compatibility note:** All players in a lobby should use the same mod build. In `0.1.8`, lobby capacity is fixed at 16; local config only controls difficulty scaling and the macOS TLS workaround.
+> **Compatibility note:** `0.1.8` has been checked with game versions `v0.107.1` and `public-beta v0.108.0`. All players in a lobby should use the same RMP build. Lobby capacity is fixed at 16; local config only controls difficulty scaling and the macOS TLS workaround.
 
 ## ⚙️ Configuration
 
@@ -129,7 +132,7 @@ tls_workaround=true
 difficulty_scaling=true
 ```
 
-`max_player_limit` from older configs is intentionally ignored in this Reforge beta. The current lobby cap is fixed at 16.
+`max_player_limit` from older configs is intentionally ignored in this Reforge release. The current lobby cap is fixed at 16.
 
 > **Important for upgrading from older releases:** If you still have `mods/RemoveMultiplayerPlayerLimit/config.json` from an old build, delete it before launching Reforge. Slay the Spire 2 scans JSON files in the mod folder as manifests, while `config.ini` is safe.
 

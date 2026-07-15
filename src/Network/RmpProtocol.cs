@@ -173,15 +173,18 @@ public static class RmpProtocol
         var currentPlayers = lobby.Players.ToDictionary(player => player.id);
         var snapshot = snapshotPlayers.Select(player => player.ToLobbyPlayer()).ToList();
         var snapshotIds = snapshot.Select(player => player.id).ToHashSet();
+        List<ulong> previousOrder = lobby.Players.Select(player => player.id).ToList();
+        List<MegaCrit.Sts2.Core.Entities.Multiplayer.LobbyPlayer> orderedPlayers = new(snapshot.Count);
+        List<MegaCrit.Sts2.Core.Entities.Multiplayer.LobbyPlayer> disconnectedPlayers = new();
+        List<MegaCrit.Sts2.Core.Entities.Multiplayer.LobbyPlayer> connectedPlayers = new();
+        List<MegaCrit.Sts2.Core.Entities.Multiplayer.LobbyPlayer> changedPlayers = new();
 
-        for (int i = lobby.Players.Count - 1; i >= 0; i--)
+        foreach (var existing in lobby.Players)
         {
-            var existing = lobby.Players[i];
             if (!snapshotIds.Contains(existing.id))
             {
-                lobby.Players.RemoveAt(i);
                 if (existing.id != lobby.NetService.NetId)
-                    lobby.LobbyListener.RemotePlayerDisconnected(existing);
+                    disconnectedPlayers.Add(existing);
             }
         }
 
@@ -189,19 +192,38 @@ public static class RmpProtocol
         {
             if (!currentPlayers.TryGetValue(snapshotPlayer.id, out var existing))
             {
-                lobby.Players.Add(snapshotPlayer);
+                orderedPlayers.Add(snapshotPlayer);
                 if (snapshotPlayer.id != lobby.NetService.NetId)
-                    lobby.LobbyListener.PlayerConnected(snapshotPlayer);
+                    connectedPlayers.Add(snapshotPlayer);
                 continue;
             }
 
             if (!LobbyPlayersEqual(existing, snapshotPlayer))
             {
-                int idx = lobby.Players.FindIndex(player => player.id == snapshotPlayer.id);
-                if (idx >= 0)
-                    lobby.Players[idx] = snapshotPlayer;
-                ExtendedLobbyModule.NotifyPlayerChanged(lobby, snapshotPlayer, false);
+                changedPlayers.Add(snapshotPlayer);
+                orderedPlayers.Add(snapshotPlayer);
+                continue;
             }
+
+            orderedPlayers.Add(existing);
+        }
+
+        lobby.Players.Clear();
+        lobby.Players.AddRange(orderedPlayers);
+
+        foreach (var disconnectedPlayer in disconnectedPlayers)
+            lobby.LobbyListener.RemotePlayerDisconnected(disconnectedPlayer);
+
+        foreach (var connectedPlayer in connectedPlayers)
+            lobby.LobbyListener.PlayerConnected(connectedPlayer);
+
+        foreach (var changedPlayer in changedPlayers)
+            ExtendedLobbyModule.NotifyPlayerChanged(lobby, changedPlayer, false);
+
+        if (!previousOrder.SequenceEqual(orderedPlayers.Select(player => player.id)))
+        {
+            string order = string.Join(",", orderedPlayers.Select(player => player.id));
+            Log.Info($"[RMP] Lobby snapshot applied host player order: {order}");
         }
 
         NGame.Instance?.RemoteCursorContainer.Initialize(lobby.InputSynchronizer, lobby.Players.Select(player => player.id));
