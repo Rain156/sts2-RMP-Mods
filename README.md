@@ -15,10 +15,13 @@
 
 This Reforge build replaces the old Harmony patch set with a reflection and Godot SceneTree based implementation. It keeps the original goal of RMP: larger multiplayer lobbies, cleaner large-party layouts, and optional difficulty scaling for groups beyond the vanilla 4-player cap.
 
-`0.1.8` is the current stable Reforge release. It has been compatibility-checked with Slay the Spire 2 `v0.107.1` and `public-beta v0.108.0`. Both game versions use the same RMP source and network protocol; no separate `0.108`-only build is required.
+`0.1.8` is the current stable Reforge release. It has been compatibility-checked with Slay the Spire 2 `v0.107.1`, `public-beta v0.108.0`, and `public-beta v0.109.0`. These game versions use the same RMP source and network protocol; no beta-only RMP build is required.
 
 Compatibility and fixes included in `0.1.8`:
 
+- Fixed the `v0.109.0` regression where 5+ player lobbies could remain stuck after everyone readied and then start immediately when one player left. RMP now continuously maintains its ready/unready button handlers, removing vanilla callbacks even when the game's screen initialization reconnects them after the first patch attempt.
+- Isolated extended-lobby maintenance tasks so a failure while replacing the host join handler or patching one lobby screen cannot prevent the other ready/start protections from running.
+- Adapted the settings focus-chain reflection call to both the older 2-parameter and `v0.109.0` 3-parameter game signatures.
 - Verified against `v0.108.0`: the mod compiles against the current game assemblies, passes its reflection-contract checks, initializes all RMP modules, and reaches the main menu without RMP load errors.
 - Retains `v0.107.1` compatibility by avoiding new version-specific game calls and keeping the same extended lobby wire format.
 - Preserves the host's player order when applying extended lobby snapshots, then dispatches player connection, disconnection, and state-change notifications against the completed ordered list.
@@ -107,7 +110,7 @@ Linux uses the same mod folder layout as Windows:
 
 Start the game normally from Steam or your local executable.
 
-> **Compatibility note:** `0.1.8` has been checked with game versions `v0.107.1` and `public-beta v0.108.0`. All players in a lobby should use the same RMP build. Lobby capacity is fixed at 16; local config only controls difficulty scaling and the macOS TLS workaround.
+> **Compatibility note:** `0.1.8` has been checked with game versions `v0.107.1`, `public-beta v0.108.0`, and `public-beta v0.109.0`. All players in a lobby should use the same RMP build. Lobby capacity is fixed at 16; local config only controls difficulty scaling and the macOS TLS workaround.
 
 ## ⚙️ Configuration
 

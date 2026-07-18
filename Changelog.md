@@ -1,6 +1,24 @@
 ## 0.1.8 Version Changelog (English)
 
 ### Fixes
+* Fixed the `v0.109.0` regression where 5+ player lobbies could remain stuck after every player readied and then start immediately when one player disconnected.
+* Ready/unready button interception is now continuously maintained and self-healing, preventing late vanilla signal connections from routing extended-slot players back through the unsafe vanilla lobby protocol.
+* Extended-lobby maintenance operations are isolated so one reflection or scene-node failure cannot disable the remaining join, ready, and begin-run protections.
+* Settings focus-chain rebuilding now supports both the older 2-parameter and `v0.109.0` 3-parameter private method signatures.
+
+## 0.1.8 更新日志（中文）
+
+### 修复
+* 修复 `v0.109.0` 中 5 人以上全部准备后仍无法开始、退出一名玩家后立刻开局的回归问题。
+* 准备/取消准备按钮接管改为持续维护和自动修复，避免游戏较晚连接的原版回调让扩展槽位玩家重新走不安全的原版大厅协议。
+* 扩展大厅的各项维护操作现在分别隔离异常，单个反射或场景节点失败不会禁用其他加入、准备和开局保护。
+* 设置界面的焦点链重建现在同时兼容旧版 2 参数签名与 `v0.109.0` 的 3 参数私有方法签名。
+
+-------------------------------------------------------------------
+
+## 0.1.8 Version Changelog (English)
+
+### Fixes
 * Fixed beta 0.106.1 mod-load failure by building release packages against the currently installed game `sts2.dll`, whose `INetMessage` interface now requires `ShouldBuffer`.
 
 ## 0.1.8 更新日志（中文）

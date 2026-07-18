@@ -237,11 +237,21 @@ public partial class ExtendedLobbyModule : IRMPModule
         public required MessageHandlerDelegate<ClientLobbyJoinRequestMessage> ReplacementJoinHandler { get; init; }
     }
 
+    private sealed class ScreenPatchState
+    {
+        public required ulong ScreenId { get; init; }
+        public required Node Screen { get; init; }
+        public required Callable EmbarkReplacement { get; init; }
+        public required Callable UnreadyReplacement { get; init; }
+        public bool HasLoggedReady { get; set; }
+    }
+
     private sealed partial class ExtendedLobbyNode : Node
     {
-        private readonly HashSet<ulong> _patchedStandardScreens = new();
-        private readonly HashSet<ulong> _patchedCustomScreens = new();
-        private readonly HashSet<ulong> _patchedDailyScreens = new();
+        private readonly Dictionary<string, string> _operationErrors = new();
+        private ScreenPatchState? _standardScreenPatch;
+        private ScreenPatchState? _customScreenPatch;
+        private ScreenPatchState? _dailyScreenPatch;
         private int _frameCounter;
 
         public ExtendedLobbyNode()
@@ -256,59 +266,129 @@ public partial class ExtendedLobbyModule : IRMPModule
 
             StartRunLobby? lobby = SceneMonitor.FindActiveStartRunLobby();
             if (lobby != null && lobby.NetService.Type == NetGameType.Host)
-                EnsureHostJoinPatch(lobby);
+                RunGuarded("host join handler", () => EnsureHostJoinPatch(lobby));
 
-            PatchStandardScreen(SceneRegistry.Instance?.CharacterSelectScreen);
-            PatchCustomScreen(SceneRegistry.Instance?.CustomRunScreen);
-            PatchDailyScreen(SceneRegistry.Instance?.DailyRunScreen);
+            RunGuarded("standard lobby buttons", () => PatchStandardScreen(SceneRegistry.Instance?.CharacterSelectScreen));
+            RunGuarded("custom lobby buttons", () => PatchCustomScreen(SceneRegistry.Instance?.CustomRunScreen));
+            RunGuarded("daily lobby buttons", () => PatchDailyScreen(SceneRegistry.Instance?.DailyRunScreen));
         }
 
         private void PatchStandardScreen(NCharacterSelectScreen? screen)
         {
             if (screen == null)
+            {
+                ReleaseInactiveScreenPatch(ref _standardScreenPatch);
                 return;
+            }
 
             ulong id = screen.GetInstanceId();
-            if (_patchedStandardScreens.Contains(id))
-                return;
+            if (_standardScreenPatch?.ScreenId != id
+                || !ReferenceEquals(_standardScreenPatch.Screen, screen))
+            {
+                _standardScreenPatch = new ScreenPatchState
+                {
+                    ScreenId = id,
+                    Screen = screen,
+                    EmbarkReplacement = Callable.From<NButton>(button => OnStandardEmbarkPressed(screen, button)),
+                    UnreadyReplacement = Callable.From<NButton>(button => OnStandardUnreadyPressed(screen, button))
+                };
+            }
 
-            ReplaceReleasedHandler(screen.GetNode<NButton>("ConfirmButton"), screen, "OnEmbarkPressed",
-                button => OnStandardEmbarkPressed(screen, button));
-            ReplaceReleasedHandler(screen.GetNode<NButton>("UnreadyButton"), screen, "OnUnreadyPressed",
-                button => OnStandardUnreadyPressed(screen, button));
-            _patchedStandardScreens.Add(id);
+            EnsureScreenHandlers(
+                screen,
+                screen.GetNode<NButton>("ConfirmButton"),
+                screen.GetNode<NButton>("UnreadyButton"),
+                _standardScreenPatch,
+                "standard");
         }
 
         private void PatchCustomScreen(NCustomRunScreen? screen)
         {
             if (screen == null)
+            {
+                ReleaseInactiveScreenPatch(ref _customScreenPatch);
                 return;
+            }
 
             ulong id = screen.GetInstanceId();
-            if (_patchedCustomScreens.Contains(id))
-                return;
+            if (_customScreenPatch?.ScreenId != id
+                || !ReferenceEquals(_customScreenPatch.Screen, screen))
+            {
+                _customScreenPatch = new ScreenPatchState
+                {
+                    ScreenId = id,
+                    Screen = screen,
+                    EmbarkReplacement = Callable.From<NButton>(button => OnCustomEmbarkPressed(screen, button)),
+                    UnreadyReplacement = Callable.From<NButton>(button => OnCustomUnreadyPressed(screen, button))
+                };
+            }
 
-            ReplaceReleasedHandler(screen.GetNode<NButton>("ConfirmButton"), screen, "OnEmbarkPressed",
-                button => OnCustomEmbarkPressed(screen, button));
-            ReplaceReleasedHandler(screen.GetNode<NButton>("UnreadyButton"), screen, "OnUnreadyPressed",
-                button => OnCustomUnreadyPressed(screen, button));
-            _patchedCustomScreens.Add(id);
+            EnsureScreenHandlers(
+                screen,
+                screen.GetNode<NButton>("ConfirmButton"),
+                screen.GetNode<NButton>("UnreadyButton"),
+                _customScreenPatch,
+                "custom");
         }
 
         private void PatchDailyScreen(MegaCrit.Sts2.Core.Nodes.Screens.DailyRun.NDailyRunScreen? screen)
         {
             if (screen == null)
+            {
+                ReleaseInactiveScreenPatch(ref _dailyScreenPatch);
                 return;
+            }
 
             ulong id = screen.GetInstanceId();
-            if (_patchedDailyScreens.Contains(id))
-                return;
+            if (_dailyScreenPatch?.ScreenId != id
+                || !ReferenceEquals(_dailyScreenPatch.Screen, screen))
+            {
+                _dailyScreenPatch = new ScreenPatchState
+                {
+                    ScreenId = id,
+                    Screen = screen,
+                    EmbarkReplacement = Callable.From<NButton>(button => OnDailyEmbarkPressed(screen, button)),
+                    UnreadyReplacement = Callable.From<NButton>(button => OnDailyUnreadyPressed(screen, button))
+                };
+            }
 
-            ReplaceReleasedHandler(screen.GetNode<NButton>("%ConfirmButton"), screen, "OnEmbarkPressed",
-                button => OnDailyEmbarkPressed(screen, button));
-            ReplaceReleasedHandler(screen.GetNode<NButton>("%UnreadyButton"), screen, "OnUnreadyPressed",
-                button => OnDailyUnreadyPressed(screen, button));
-            _patchedDailyScreens.Add(id);
+            EnsureScreenHandlers(
+                screen,
+                screen.GetNode<NButton>("%ConfirmButton"),
+                screen.GetNode<NButton>("%UnreadyButton"),
+                _dailyScreenPatch,
+                "daily");
+        }
+
+        private static void ReleaseInactiveScreenPatch(ref ScreenPatchState? state)
+        {
+            if (state != null
+                && (!GodotObject.IsInstanceValid(state.Screen) || !state.Screen.IsInsideTree()))
+            {
+                state = null;
+            }
+        }
+
+        private void RunGuarded(string operation, Action action)
+        {
+            try
+            {
+                action();
+                if (_operationErrors.Remove(operation))
+                    Log.Info($"[RMP:ExtendedLobby] Recovered {operation} maintenance.");
+            }
+            catch (Exception ex)
+            {
+                string error = $"{ex.GetType().FullName}: {ex.Message}";
+                if (_operationErrors.TryGetValue(operation, out string? previousError)
+                    && previousError == error)
+                {
+                    return;
+                }
+
+                _operationErrors[operation] = error;
+                Log.Error($"[RMP:ExtendedLobby] Failed {operation} maintenance: {ex}");
+            }
         }
 
         private void EnsureHostJoinPatch(StartRunLobby lobby)
@@ -334,6 +414,8 @@ public partial class ExtendedLobbyModule : IRMPModule
                 OriginalJoinHandler = originalHandler,
                 ReplacementJoinHandler = replacementHandler
             };
+
+            Log.Info("[RMP:ExtendedLobby] Installed extended host join handler.");
         }
 
         private static void HandleExtendedJoinRequest(
@@ -441,18 +523,42 @@ public partial class ExtendedLobbyModule : IRMPModule
             return responsePlayers;
         }
 
-        private static void ReplaceReleasedHandler(
+        private static void EnsureScreenHandlers(
+            object target,
+            NButton embarkButton,
+            NButton unreadyButton,
+            ScreenPatchState state,
+            string screenName)
+        {
+            EnsureReleasedHandler(
+                embarkButton,
+                target,
+                "OnEmbarkPressed",
+                state.EmbarkReplacement);
+            EnsureReleasedHandler(
+                unreadyButton,
+                target,
+                "OnUnreadyPressed",
+                state.UnreadyReplacement);
+
+            if (!state.HasLoggedReady)
+            {
+                state.HasLoggedReady = true;
+                Log.Info($"[RMP:ExtendedLobby] Maintaining RMP ready handlers for the {screenName} lobby screen.");
+            }
+        }
+
+        private static void EnsureReleasedHandler(
             NButton button,
             object target,
             string originalMethodName,
-            Action<NButton> replacement)
+            Callable replacement)
         {
             Callable originalCallable = CreatePrivateReleasedCallable(target, originalMethodName);
-            bool disconnectedOriginal = DisconnectReleasedHandler(button, target, originalMethodName, originalCallable);
-            if (!disconnectedOriginal)
-                Log.Warn($"[RMP:ExtendedLobby] Did not find original released handler {target.GetType().Name}.{originalMethodName}.");
+            DisconnectReleasedHandler(button, target, originalMethodName, originalCallable);
 
-            button.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(replacement));
+            if (!button.IsConnected(NClickableControl.SignalName.Released, replacement))
+                button.Connect(NClickableControl.SignalName.Released, replacement);
         }
 
         private static bool DisconnectReleasedHandler(

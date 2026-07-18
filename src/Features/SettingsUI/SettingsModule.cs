@@ -265,7 +265,15 @@ public partial class SettingsModule : IRMPModule
             if (_mod._getSettingsOptionsMethod == null || _mod._panelFirstControlField == null) return;
 
             List<Control> controls = new();
-            _mod._getSettingsOptionsMethod.Invoke(panel, new object[] { panel.Content, controls });
+            ParameterInfo[] parameters = _mod._getSettingsOptionsMethod.GetParameters();
+            object?[] arguments = parameters.Length switch
+            {
+                2 => new object?[] { panel.Content, controls },
+                3 => new object?[] { panel.Content, controls, false },
+                _ => throw new TargetParameterCountException(
+                    $"Unsupported NSettingsPanel.GetSettingsOptionsRecursive signature with {parameters.Length} parameters.")
+            };
+            _mod._getSettingsOptionsMethod.Invoke(panel, arguments);
 
             for (int i = 0; i < controls.Count; i++)
             {
