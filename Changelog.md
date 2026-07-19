@@ -3,6 +3,8 @@
 ### Fixes
 * Fixed the `v0.109.0` regression where 5+ player lobbies could remain stuck after every player readied and then start immediately when one player disconnected.
 * Ready/unready button interception is now continuously maintained and self-healing, preventing late vanilla signal connections from routing extended-slot players back through the unsafe vanilla lobby protocol.
+* Fixed extended-run black screens by enabling vanilla network message buffering before the asynchronous run transition.
+* Stopped RMP lobby snapshots from repeatedly reinitializing and disposing the game's `PeerInputSynchronizer`, preserving `PeerInputMessage` handling throughout the lobby and run transition.
 * Extended-lobby maintenance operations are isolated so one reflection or scene-node failure cannot disable the remaining join, ready, and begin-run protections.
 * Settings focus-chain rebuilding now supports both the older 2-parameter and `v0.109.0` 3-parameter private method signatures.
 
@@ -11,6 +13,8 @@
 ### 修复
 * 修复 `v0.109.0` 中 5 人以上全部准备后仍无法开始、退出一名玩家后立刻开局的回归问题。
 * 准备/取消准备按钮接管改为持续维护和自动修复，避免游戏较晚连接的原版回调让扩展槽位玩家重新走不安全的原版大厅协议。
+* 修复扩展开局时的持续黑屏：在异步切换游戏场景前启用原版网络消息缓冲。
+* RMP 大厅快照不再重复初始化并销毁游戏的 `PeerInputSynchronizer`，确保大厅及开局切换期间的 `PeerInputMessage` handler 保持有效。
 * 扩展大厅的各项维护操作现在分别隔离异常，单个反射或场景节点失败不会禁用其他加入、准备和开局保护。
 * 设置界面的焦点链重建现在同时兼容旧版 2 参数签名与 `v0.109.0` 的 3 参数私有方法签名。
 

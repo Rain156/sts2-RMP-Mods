@@ -6,7 +6,6 @@ using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
 using MegaCrit.Sts2.Core.Multiplayer.Serialization;
-using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Nodes.Screens;
 using MegaCrit.Sts2.Core.Nodes.Screens.MainMenu;
 using MegaCrit.Sts2.Core.Runs;
@@ -126,7 +125,7 @@ public static class RmpProtocol
             return;
 
         StartRunLobby? lobby = SceneMonitor.FindActiveStartRunLobby();
-        if (lobby == null)
+        if (lobby == null || ExtendedLobbyModule.IsBeginningRun(lobby))
             return;
 
         ApplyLobbySnapshot(lobby, message.players);
@@ -165,7 +164,7 @@ public static class RmpProtocol
             lobby,
             message.players.Select(player => player.ToLobbyPlayer()).ToList());
 
-        lobby.LobbyListener.BeginRun(message.seed, acts, modifiers);
+        ExtendedLobbyModule.BeginExtendedRunLocally(lobby, message.seed, acts, modifiers);
     }
 
     private static void ApplyLobbySnapshot(StartRunLobby lobby, IReadOnlyList<RmpLobbyPlayerState> snapshotPlayers)
@@ -226,7 +225,6 @@ public static class RmpProtocol
             Log.Info($"[RMP] Lobby snapshot applied host player order: {order}");
         }
 
-        NGame.Instance?.RemoteCursorContainer.Initialize(lobby.InputSynchronizer, lobby.Players.Select(player => player.id));
     }
 
     private static bool LobbyPlayersEqual(

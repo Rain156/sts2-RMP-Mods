@@ -20,6 +20,8 @@ This Reforge build replaces the old Harmony patch set with a reflection and Godo
 Compatibility and fixes included in `0.1.8`:
 
 - Fixed the `v0.109.0` regression where 5+ player lobbies could remain stuck after everyone readied and then start immediately when one player left. RMP now continuously maintains its ready/unready button handlers, removing vanilla callbacks even when the game's screen initialization reconnects them after the first patch attempt.
+- Fixed the black screen after an extended begin-run message by enabling the game's network message buffer before starting the asynchronous run transition, matching the vanilla begin-run sequence.
+- Stopped reinitializing the remote cursor container for every RMP lobby snapshot. The game disposes the existing `PeerInputSynchronizer` during reinitialization, which previously removed its `PeerInputMessage` handler and caused thousands of dropped input-sync messages.
 - Isolated extended-lobby maintenance tasks so a failure while replacing the host join handler or patching one lobby screen cannot prevent the other ready/start protections from running.
 - Adapted the settings focus-chain reflection call to both the older 2-parameter and `v0.109.0` 3-parameter game signatures.
 - Verified against `v0.108.0`: the mod compiles against the current game assemblies, passes its reflection-contract checks, initializes all RMP modules, and reaches the main menu without RMP load errors.

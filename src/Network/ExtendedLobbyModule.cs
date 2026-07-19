@@ -164,9 +164,8 @@ public partial class ExtendedLobbyModule : IRMPModule
             List<ModifierModel> modifiers = lobby.Modifiers.ToList();
             List<ActModel> acts = BuildActsForBeginRun(seed, lobby.Act1, lobby, lobby.Players);
 
-            BeginningRunField?.SetValue(lobby, true);
             RmpProtocol.BroadcastExtendedBeginRun(lobby.Players, seed, lobby.Act1, modifiers);
-            lobby.LobbyListener.BeginRun(seed, acts, modifiers);
+            BeginExtendedRunLocally(lobby, seed, acts, modifiers);
 
             if (lobby.NetService is NetHostGameService hostGameService)
                 hostGameService.NetHost?.SetHostIsClosed(isClosed: true);
@@ -180,7 +179,31 @@ public partial class ExtendedLobbyModule : IRMPModule
         }
     }
 
-    private static bool IsBeginningRun(StartRunLobby lobby)
+    internal static void BeginExtendedRunLocally(
+        StartRunLobby lobby,
+        string seed,
+        List<ActModel> acts,
+        IReadOnlyList<ModifierModel> modifiers)
+    {
+        lobby.NetService.SetBufferMessages(bufferMessages: true);
+        BeginningRunField?.SetValue(lobby, true);
+
+        try
+        {
+            lobby.LobbyListener.BeginRun(seed, acts, modifiers);
+            Log.Info(
+                $"[RMP:ExtendedLobby] Began local extended run transition with message buffering enabled " +
+                $"({lobby.Players.Count} players, {lobby.NetService.Type}).");
+        }
+        catch
+        {
+            BeginningRunField?.SetValue(lobby, false);
+            lobby.NetService.SetBufferMessages(bufferMessages: false);
+            throw;
+        }
+    }
+
+    internal static bool IsBeginningRun(StartRunLobby lobby)
         => BeginningRunField?.GetValue(lobby) is true;
 
     private static void NormalizeRandomCharacters(StartRunLobby lobby, string seed)
