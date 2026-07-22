@@ -5,14 +5,33 @@
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <Nullable>enable</Nullable>
     <LangVersion>12.0</LangVersion>
+    <RootNamespace>RemoveMultiplayerPlayerLimit</RootNamespace>
+    <Sts2AssemblyPath Condition="'$(Sts2AssemblyPath)' == '' AND '$(STS2GamePath)' != '' AND Exists('$(STS2GamePath)\data_sts2_windows_x86_64\sts2.dll')">$(STS2GamePath)\data_sts2_windows_x86_64\sts2.dll</Sts2AssemblyPath>
+    <Sts2AssemblyPath Condition="'$(Sts2AssemblyPath)' == ''">libs\sts2.dll</Sts2AssemblyPath>
+    <SteamworksAssemblyPath Condition="'$(SteamworksAssemblyPath)' == '' AND '$(STS2GamePath)' != '' AND Exists('$(STS2GamePath)\data_sts2_windows_x86_64\Steamworks.NET.dll')">$(STS2GamePath)\data_sts2_windows_x86_64\Steamworks.NET.dll</SteamworksAssemblyPath>
+    <SteamworksAssemblyPath Condition="'$(SteamworksAssemblyPath)' == ''">libs\Steamworks.NET.dll</SteamworksAssemblyPath>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="build\**\*.cs" />
+    <Compile Remove="RMP Origin Src\**\*.cs" />
+    <Compile Remove="Slay the Spire 2\**\*.cs" />
     <Reference Include="sts2">
-      <HintPath>libs\sts2.dll</HintPath>
+      <HintPath>$(Sts2AssemblyPath)</HintPath>
+      <Private>false</Private>
     </Reference>
-    <Reference Include="0Harmony">
-      <HintPath>libs\0Harmony.dll</HintPath>
+    <Reference Include="Steamworks.NET">
+      <HintPath>$(SteamworksAssemblyPath)</HintPath>
+      <Private>false</Private>
     </Reference>
+    <!-- Runtime patching frameworks are intentionally not referenced. -->
   </ItemGroup>
+  <Target Name="CopyToMods" AfterTargets="Build"
+          Condition="'$(STS2GamePath)' != '' AND Exists('$(STS2GamePath)\mods')">
+    <MakeDir Directories="$(STS2GamePath)\mods\RemoveMultiplayerPlayerLimit" />
+    <Copy SourceFiles="$(OutputPath)RemoveMultiplayerPlayerLimit.dll"
+          DestinationFolder="$(STS2GamePath)\mods\RemoveMultiplayerPlayerLimit\" />
+    <Copy SourceFiles="RemoveMultiplayerPlayerLimit.json"
+          DestinationFolder="$(STS2GamePath)\mods\RemoveMultiplayerPlayerLimit\"
+          Condition="Exists('RemoveMultiplayerPlayerLimit.json')" />
+  </Target>
 </Project>

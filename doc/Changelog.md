@@ -1,26 +1,4 @@
-## 0.1.8 Version Changelog (English)
-
-### Fixes
-* Fixed the `v0.109.0` regression where 5+ player lobbies could remain stuck after every player readied and then start immediately when one player disconnected.
-* Ready/unready button interception is now continuously maintained and self-healing, preventing late vanilla signal connections from routing extended-slot players back through the unsafe vanilla lobby protocol.
-* Fixed extended-run black screens by enabling vanilla network message buffering before the asynchronous run transition.
-* Stopped RMP lobby snapshots from repeatedly reinitializing and disposing the game's `PeerInputSynchronizer`, preserving `PeerInputMessage` handling throughout the lobby and run transition.
-* Extended-lobby maintenance operations are isolated so one reflection or scene-node failure cannot disable the remaining join, ready, and begin-run protections.
-* Settings focus-chain rebuilding now supports both the older 2-parameter and `v0.109.0` 3-parameter private method signatures.
-
-## 0.1.8 更新日志（中文）
-
-### 修复
-* 修复 `v0.109.0` 中 5 人以上全部准备后仍无法开始、退出一名玩家后立刻开局的回归问题。
-* 准备/取消准备按钮接管改为持续维护和自动修复，避免游戏较晚连接的原版回调让扩展槽位玩家重新走不安全的原版大厅协议。
-* 修复扩展开局时的持续黑屏：在异步切换游戏场景前启用原版网络消息缓冲。
-* RMP 大厅快照不再重复初始化并销毁游戏的 `PeerInputSynchronizer`，确保大厅及开局切换期间的 `PeerInputMessage` handler 保持有效。
-* 扩展大厅的各项维护操作现在分别隔离异常，单个反射或场景节点失败不会禁用其他加入、准备和开局保护。
-* 设置界面的焦点链重建现在同时兼容旧版 2 参数签名与 `v0.109.0` 的 3 参数私有方法签名。
-
--------------------------------------------------------------------
-
-## 0.1.8 Version Changelog (English)
+## 0.1.8 Changelog (English)
 
 ### Fixes
 * Fixed beta 0.106.1 mod-load failure by building release packages against the currently installed game `sts2.dll`, whose `INetMessage` interface now requires `ShouldBuffer`.
@@ -32,13 +10,13 @@
 
 -------------------------------------------------------------------
 
-## 0.1.8 Version Changelog (English)
+## 0.1.8 Changelog (English)
 
 ### Fixes
 * Fixed beta 0.106 treasure-room desync by removing RMP's extra remote chest reward replay and leaving vanilla's one-off chest reward synchronization in control.
 * Fixed 16-player lobbies getting stuck around the vanilla-safe slots by routing 5+ player joins through RMP snapshots with 4-bit slot IDs, and by using the extended ready/begin-run flow for fixed-16 lobbies.
 
-## 0.1.8 版本更新日志（中文）
+## 0.1.8 更新日志（中文）
 
 ### 修复
 * 修复 beta 0.106 中第一个宝箱后容易数据不同步的问题：移除 RMP 对远端开箱奖励的额外重放，避免重复生成奖励。
@@ -46,15 +24,40 @@
 
 -------------------------------------------------------------------
 
-## 0.1.4 Version Changelog (English)
+## 0.1.4 Changelog (English)
 
 ### Fixes
 * Fixed duplicated Settings entries. Reopening the Settings screen no longer stacks extra "Max Players" / "Difficulty Scaling" rows.
 
-## 0.1.4 版本更新日志（中文）
+## 0.1.4 更新日志（中文）
 
 ### 修复
 * 修复设置界面重复注入的问题。现在反复打开设置界面时，不会再不断增加“房间人数上限 / 难度缩放”选项。
+
+-------------------------------------------------------------------
+
+## 0.1.2 Changelog (English)
+
+全部重构，不再使用 Harmony。改为反射 + SceneTree 注入，Steamworks.NET 直接调 API 修 Steam 大厅人数限制。
+
+### Changes
+* Entire codebase rewritten from scratch without Harmony / MonoMod — uses reflection + SceneTree injection instead.
+* Steam lobby player limit fixed via direct Steamworks.NET API (`SteamMatchmaking.SetLobbyMemberLimit()`).
+* Campfire crash fixed for 5+ players (pre-inject extra character containers before `_Ready()`).
+* Settings paginator fixed — NPaginator uses virtual method override, not Godot signals.
+* All platforms (Windows / macOS / Linux) work natively, no more Harmony-related crashes.
+
+## 0.1.2 更改日志（中文）
+
+全部重构，不再使用 Harmony。改为反射 + SceneTree 注入，Steamworks.NET 直接调 API 修 Steam 大厅人数限制。
+
+### 更改
+* 整个代码库从零重写，不再依赖 Harmony / MonoMod，改用反射 + SceneTree 注入。
+* Steam 大厅人数限制通过 Steamworks.NET 直接调用 API 修复。
+* 修复 5 人以上进营火崩溃的问题（在 `_Ready()` 之前预注入额外的角色容器）。
+* 修复设置界面翻页器报错（NPaginator 用虚方法 override 替代不存在的 Godot 信号）。
+* 所有平台（Windows / macOS / Linux）原生运行，不再有 Harmony 相关崩溃。
+
 
 -------------------------------------------------------------------
 
@@ -97,13 +100,13 @@
 ## 0.0.5A 版本更改日志（中文）
 
 ### 新功能
-* 新增游戏内设置入口，可在“游戏设置”界面中实时调整联机房间人数上限，支持 4-16。
+* 新增游戏内设置入口，可在"游戏设置"界面中实时调整联机房间人数上限，支持 4-16。
 * 新增 Linux 平台支持。
 * 新增 MacOS 平台支持。
 
 ### 改进
 * 将配置文件优化为 config.ini 文件格式，删除无用配置项。
-* 当遗物被拿完，箱子无法开出遗物时，填充为“草莓”。
+* 当遗物被拿完，箱子无法开出遗物时，填充为"草莓"。
 * 改进联机兼容性。
 
 ### 修复
